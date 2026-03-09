@@ -31,7 +31,7 @@ object GameIncorrect {
         .environmentEvent("e05", "Сработал таймер третьего барабана")
         .environmentEvent("e06", "Выдан жетон из банка")
         .environmentEvent("z02", "Закрыть монетоприемник")
-        .automationEvent("z03", "A1", "Открыть монетоприемник")
+        .environmentEvent("z03", "Открыть монетоприемник")
         .environmentEvent("z04", "Выдать жетон из банка")
         .environmentEvent("z05", "Сбросить сумму выигрыша")
         .environmentEvent("z12", "Обновить индикатор «Ставка»")
@@ -73,11 +73,10 @@ object GameIncorrect {
 
     fun buildA1() = AutomatonBuilder("Монетоприемник", listOf("A1"))
         .automationEvent("a02", "A0", "Нажата кнопка «Возврат»")
-        .automationEvent("z03", "A0", "Открыть монетоприемник")
         .automationEvent("a11", "A0", "Опущен жетон")
         .automationEvent("a12", "A0", "Необходимо перевести жетоны в банк")
-    .automationEvent("f02", "A0", "Закрыть монетоприемник")
-    .automationEvent("f03", "A0", "Открыть монетоприемник")
+        .automationEvent("f02", "A0", "Закрыть монетоприемник")
+        .automationEvent("f03", "A0", "Открыть монетоприемник")
         .environmentEvent("e10", "Опущен жетон")
         .environmentEvent("z02", "Закрыть монетоприемник")
         .environmentEvent("z12", "Обновить индикатор «Ставка»")
@@ -110,7 +109,7 @@ fun main() {
 
 //    Corrector(a0, a2).correct()
 
-    var res = Multiplier(a0, a2).multiply()
+    var res = Multiplier(a0, a1).multiply()
 //    res = Multiplier(res, a2).multiply()
 
     println()

@@ -84,6 +84,18 @@ data class Automaton(
 
     private val idStr get() = id.joinToString("")
 
+    fun formatEvents(inputIds: List<String>): String {
+        val events = getEvents(inputIds).joinToString(
+            ","
+        ) {
+            when (it) {
+                is AutomationEventInput -> "${it.automationId}(${it.id})"
+                else -> it.id
+            }
+        }
+        return events
+    }
+
     fun toUML(): String {
         var res = "state \"«$name» ($idStr)\" as $idStr {\n"
         res += "    [*] --> $idStr${startState.id}\n"
@@ -91,24 +103,22 @@ data class Automaton(
         states.forEach {
             var nestedFsm = ""
             if (it.nestedFsmIds.isNotEmpty()) {
-                nestedFsm = "(${it.nestedFsmIds.joinToString(",")})"
+                nestedFsm = "${it.nestedFsmIds.joinToString(",")}\\n"
             }
             res += "    state \"${it.name}\" as ${idStr}${it.id} : $nestedFsm ${
-                getEvents(it.enterEventsId).joinToString(
-                    ","
-                ) { it2 -> it2.id }
+                formatEvents(it.enterEventsId)
             }\n"
         }
         transitions.forEach {
-            res += "    ${idStr}${getState(it.fromStateId).id} --> ${idStr}${getState(it.toStateId).id} : <u>${it.eventId}${if (it.inputIds.isNotEmpty()) " & " else ""}${
+            res += "    ${idStr}${getState(it.fromStateId).id} --> ${idStr}${getState(it.toStateId).id} : <u>${
+                formatEvents(listOf(it.eventId))
+            }${if (it.inputIds.isNotEmpty()) " & " else ""}${
                 it.inputIds.joinToString(
                     " & "
                 )
             }\\n${
-                if (it.enterEventsId.isNotEmpty())  
-                getEvents(it.enterEventsId).joinToString(
-                    ","
-                ) { it2 -> it2.id } else '~'
+                if (it.enterEventsId.isNotEmpty())
+                    formatEvents(it.enterEventsId) else '~'
             }\n"
         }
         res += "}"
