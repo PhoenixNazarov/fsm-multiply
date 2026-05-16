@@ -80,7 +80,10 @@ data class Automaton(
         getTransitionFromState(stateId).find { it.eventId == eventId }?.toStateId?.let { getState(it) }
 
     fun getEvent(inputId: String) = events.first { it.id == inputId }
-    fun getEvents(inputIds: List<String>) = events.filter { it.id in inputIds }
+    fun getEvents(inputIds: List<String>): List<EventInput> {
+        val map = events.associateBy { it.id }
+        return inputIds.mapNotNull { map[it] }
+    }
 
     private val idStr get() = id.joinToString("")
 
