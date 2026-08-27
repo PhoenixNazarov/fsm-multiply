@@ -97,12 +97,20 @@ object GameJackpot {
         .environmentEvent("e22", "Сработал таймер первого барабана")
         .state(0, "Барабаны остановлены")
         .state(1, "Барабаны запущены")
-        .state(2, "Первый барабан остановлен", listOf("z23"))
-        .state(3, "Второй барабан остановлен", listOf("z25"), nestedFsmIds = listOf("A3"))
+        .state(2, "Первый барабан остановлен")
+        .state(3, "Второй барабан остановлен", nestedFsmIds = listOf("A3"))
         .transition(0, 1, "e0", enterEventsId = listOf("z20"))
         .transition(1, 1, "e01", enterEventsId = listOf("z21"))
-        .transition(1, 2, "e22")
-        .transition(2, 3, "e23")
+        // z23/z25 moved off the state declaration and onto the entering transition:
+        // state-level enterEventsId gets folded into the composite state's identity
+        // (CalculateStateWithEntriesId), so every extra internal move A3 makes while
+        // nested here (e15/e07/e06) re-derives a "revisit" of state 3 with a
+        // different accumulated enterEventsId set than the original entry - same
+        // name, different identity, hence the duplicate-name states the diagnostics
+        // flagged. Transition-level enterEventsId is a one-shot edge label, not part
+        // of state identity, so it doesn't get smeared this way.
+        .transition(1, 2, "e22", enterEventsId = listOf("z23"))
+        .transition(2, 3, "e23", enterEventsId = listOf("z25"))
         .transition(3, 0, "e05", enterEventsId = listOf("z27", "z28"))
         .build()
 
