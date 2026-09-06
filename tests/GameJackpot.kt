@@ -151,6 +151,7 @@ object GameJackpot {
         .environmentEvent("z31", "Обновить индикатор «Джекпот»")
         .environmentEvent("z32", "Обнулить джекпот")
         .environmentEvent("x30", "Случайная проверка джекпот-комбинации (специальный рандомайзер)")
+        .environmentEvent("!x30", "Случайная проверка джекпот-комбинации не прошла")
         .state(0, "Накопление")
         .state(1, "Выплата джекпота")
         // A3 genuinely nested in "Игра" alongside A2, reacting to the SAME "e05"
@@ -160,7 +161,15 @@ object GameJackpot {
         // siblings are processed in that list order, and A2's own e05 reaction is
         // unconditional, so if A2 went first it would already be at state0 by the
         // time A3 checks. x30 is the random check ("специальный рандомайзер").
+        // Plain environment guards aren't tracked truth values in this engine - a
+        // guard with no declared alternative is effectively treated as always
+        // eligible (same reason A0 must declare x01 AND !x01 separately). Without
+        // an explicit "!x30" self-loop here, A3 would unconditionally jump to
+        // "Выплата джекпота" on every e05, never actually branching on the
+        // randomizer. The self-loop makes "остаться в Накоплении" a genuine,
+        // separately reachable alternative.
         .transition(0, 1, "e05", listOf("y2=3", "x30"), listOf("z31"))
+        .transition(0, 0, "e05", listOf("y2=3", "!x30"))
         // e33 only ever fires as a relay from A0's own two "leaving Выдача жетона"
         // transitions (see buildA0) - never independently, so this can't race with
         // A0 still being mid-dispensing (the x01&x02 self-loop doesn't relay it).
