@@ -22,21 +22,29 @@ object GameJackpot {
         .automationEvent("e02", "A1", "Нажата кнопка «Возврат»")
         .automationEvent("e12", "A1", "Необходимо перевести жетоны в банк")
         .automationEvent("e14", "A1", "Открыть монетоприемник")
+        .automationEvent("e33", "A3", "Выплата жетонов завершена")
         .automationStateEvent("y1=1", "A1", "Жетон принят", 1)
         .automationStateEvent("y1=2", "A1", "Жетон не распознан", 2)
         .automationStateEvent("y1!=2", "A1", "y1!=2", 2, false)
         .automationStateEvent("y2=0", "A2", "Барабаны прокручены", 0)
         .automationStateEvent("y3=1", "A3", "A3 выплачивает джекпот", 1)
         .automationStateEvent("y3!=1", "A3", "A3 не выплачивает джекпот", 1, eq = false)
-        // A3 (джекпот-счётчик) вложен в те же две вершины, где он реально нужен:
-        // "Игра" (вместе с A2, пока идёт раунд) и "Выдача жетона" (чтобы его
-        // переход-сброс e06 применялся, будучи по-настоящему вложенным и там).
-        // Порядок ["A3","A2"] в nestedFsmIds важен: см. buildA3 про y2=3.
+        // A3 (джекпот-счётчик) вложен ТОЛЬКО в "Игра", вместе с A2 (нужно для
+        // y2=3/y3 проверок ниже - см. buildA3). В "Выдача жетона" он НЕ вложен:
+        // сброс (e33) идёт строго через relay с конкретных переходов A0 - если бы
+        // A3 был вложен и здесь, "e33" стал бы независимо, "просто по факту
+        // вложенности" достижим на любом из трёх переходов A0 по e06 одновременно
+        // (даже на самопереходе 4->4, где выплата ещё продолжается), порождая
+        // противоречивые склеенные рёбра вида "e06 & !x01 & x01 & x02". По той же
+        // причине зачисление жетона в фонд джекпота (z30/z31) эмитит напрямую A1 -
+        // раньше это делал A3 через relay "e15", и, поскольку A3 всё равно вложен
+        // в "Игра", это давало паразитный самопереход "увеличить джекпот" даже
+        // когда монетоприёмник реально закрыт.
         .state(0, "Ожидание", listOf("z03", "z13", "z12", "e14"))
         .state(1, "Прием жетонов")
         .state(2, "Игра", listOf("e0"), nestedFsmIds = listOf("A3", "A2"))
         .state(3, "Ошибка")
-        .state(4, "Выдача жетона", nestedFsmIds = listOf("A3"))
+        .state(4, "Выдача жетона")
 // 0
         .transition(0, 1, "e11", listOf("y1=1"))
         .transition(0, 3, "e11", listOf("y1=2"), listOf("z02"))
@@ -48,10 +56,10 @@ object GameJackpot {
         .transition(2, 4, "e05", listOf("y2=0", "x01", "x02"), listOf("z04"))
         // Джекпот без обычного выигрыша - всё равно реальная выплата: A0 обязан
         // пойти в "Выдача жетона", иначе "Выплата джекпота" осталась бы вместе с
-        // "Ожидание". y3=1/y3!=1 проверяют УЖЕ посчитанный результат A3 - он
-        // гарантированно готов к этому моменту, так как A3 стоит раньше A2 в
-        // nestedFsmIds, а оба вложенных соседа обрабатываются до того, как
-        // реагирует их контейнер (A0) на то же самое событие.
+        // "Ожидание". y3=1/y3!=1 проверяют УЖЕ посчитанный результат A3 (см.
+        // buildA2 - именно A2 передаёт A3 сигнал на проверку комбинации на своём
+        // переходе по e05, поэтому к моменту, когда A0 обрабатывает тот же e05,
+        // A3 уже знает ответ).
         .transition(2, 4, "e05", listOf("y2=0", "!x01", "y3=1"))
         .transition(2, 0, "e05", listOf("y2=0", "!x01", "y3!=1"))
 // 3
@@ -59,8 +67,16 @@ object GameJackpot {
         .transition(3, 0, "d02", listOf("y1=2"), listOf("e02"))
 // 4
         .transition(4, 4, "e06", listOf("x01", "x02"), listOf("z04", "z28", "z15"))
-        .transition(4, 3, "e06", listOf("x01", "!x02"), listOf("z28", "z15"))
-        .transition(4, 0, "e06", listOf("!x01"), enterEventsId = listOf("z28", "z15"))
+        // Оба перехода, которыми A0 ПОКИДАЕТ "Выдача жетона" (в "Ошибка" и в
+        // "Ожидание"), явно релеят e33 в A3 - это единственный сигнал, по
+        // которому A3 сбрасывается обратно в "Накопление". До этого фикса A3 сам
+        // слушал "e06 & !x01" как обычное окружение-событие - оно не привязано к
+        // вложенности и было независимо достижимо на КАЖДОМ из трёх переходов A0
+        // по e06 одновременно (даже на переходе 4->4 с x01&x02!), порождая
+        // противоречивые рёбра вида "e06 & !x01 & x01 & x02". Явный relay именно
+        // на нужных двух переходах убирает эту путаницу полностью.
+        .transition(4, 3, "e06", listOf("x01", "!x02"), listOf("z28", "z15", "e33"))
+        .transition(4, 0, "e06", listOf("!x01"), enterEventsId = listOf("z28", "z15", "e33"))
         .build()
 
     fun buildA1() = AutomatonBuilder("Монетоприемник", listOf("A1"))
@@ -68,7 +84,6 @@ object GameJackpot {
         .automationEvent("e14", "A0", "Открыть монетоприемник")
         .automationEvent("e11", "A0", "Опущен жетон")
         .automationEvent("e12", "A0", "Необходимо перевести жетоны в банк")
-        .automationEvent("e15", "A3", "Жетон зачислен в банк")
         .automationStateEvent("y3!=1", "A3", "A3 не в состоянии Выплата джекпота", 1, eq = false)
         .environmentEvent("e10", "Опущен жетон")
         .environmentEvent("z02", "Закрыть монетоприемник")
@@ -78,15 +93,17 @@ object GameJackpot {
         .environmentEvent("z15", "Обновить индикатор «Банк»")
         .environmentEvent("x11", "Жетон подлинный")
         .environmentEvent("!x11", "Жетон не подлинный")
+        .environmentEvent("z30", "Увеличить сумму джекпота")
+        .environmentEvent("z31", "Обновить индикатор «Джекпот»")
         .state(0, "Монетоприемник пуст")
         .state(3, "Монетоприемник закрыт")
         .state(1, "Жетон принят", listOf("e11"))
         .state(2, "Жетон не распознан", listOf("e11"))
         // y3!=1 blocks coin acceptance while the jackpot counter is paying out.
-        .transition(0, 1, "e10", listOf("x11", "y3!=1"), listOf("z12", "e15"))
+        .transition(0, 1, "e10", listOf("x11", "y3!=1"), listOf("z12", "z30", "z31"))
         .transition(0, 2, "e10", listOf("!x11", "y3!=1"), listOf("z12"))
 // 1
-        .transition(1, 1, "e10", listOf("x11", "y3!=1"), listOf("z12", "e15"))
+        .transition(1, 1, "e10", listOf("x11", "y3!=1"), listOf("z12", "z30", "z31"))
         .transition(1, 0, "e02", enterEventsId = listOf("z14"))
         .transition(1, 3, "e12", enterEventsId = listOf("z02", "z16", "z15"))
         .transition(1, 2, "e10", listOf("!x11", "y3!=1"), listOf("z12"))
@@ -127,33 +144,27 @@ object GameJackpot {
         .build()
 
     fun buildA3() = AutomatonBuilder("Джекпот-счётчик", listOf("A3"))
-        .automationEvent("e15", "A1", "Жетон зачислен в банк")
         .automationEvent("e05", "A0", "Сработал таймер третьего барабана")
         .automationStateEvent("y2=3", "A2", "Второй барабан остановлен", 3)
+        .automationEvent("e33", "A0", "Выплата жетонов завершена")
         .environmentEvent("z30", "Увеличить сумму джекпота")
         .environmentEvent("z31", "Обновить индикатор «Джекпот»")
         .environmentEvent("z32", "Обнулить джекпот")
-        .environmentEvent("e06", "Выдан жетон из банка")
-        .environmentEvent("!x01", "Cумма выдачи выигрыша не больше нуля")
-        .environmentEvent("x_jp", "Случайная проверка джекпот-комбинации (вероятность ~20%, x > 0.8)")
+        .environmentEvent("x30", "Случайная проверка джекпот-комбинации (специальный рандомайзер)")
         .state(0, "Накопление")
         .state(1, "Выплата джекпота")
-        .transition(0, 0, "e15", listOf(), listOf("z30", "z31"))
-        // A3 по-настоящему вложен в "Игра" вместе с A2 и реагирует на ТОТ ЖЕ самый
-        // "e05", которым барабаны заканчивают свой цикл - гвард y2=3 (барабаны
-        // ещё во "Второй барабан остановлен", т.е. прямо перед тем как e05
-        // переведёт их в state0) гарантирует, что проверка комбинации возможна
-        // строго в этот момент, а не когда угодно во время вложенности.
-        // x_jp - случайная проверка ("x > 0.8").
-        //
-        // Порядок nestedFsmIds=["A3","A2"] у A0.state(2) обязателен: реальный
-        // исполнитель (Modulator.executeWithNested) обходит вложенных соседей по
-        // порядку списка. Если бы A2 шёл первым, к моменту проверки A3 барабаны
-        // уже сбросились бы сами (e05 у них безусловный), и y2=3 никогда не
-        // выполнялся бы - именно этот порядок и делает возможной синхронную
-        // проверку.
-        .transition(0, 1, "e05", listOf("y2=3", "x_jp"), listOf("z31"))
-        .transition(1, 0, "e06", listOf("!x01"), listOf("z32", "z31"))
+        // A3 genuinely nested in "Игра" alongside A2, reacting to the SAME "e05"
+        // that ends the drums' own cycle. y2=3 (drums still at "Второй барабан
+        // остановлен", i.e. checked right before e05 resets them) requires A3 be
+        // listed BEFORE A2 in nestedFsmIds=["A3","A2"] on A0.state(2) - nested
+        // siblings are processed in that list order, and A2's own e05 reaction is
+        // unconditional, so if A2 went first it would already be at state0 by the
+        // time A3 checks. x30 is the random check ("специальный рандомайзер").
+        .transition(0, 1, "e05", listOf("y2=3", "x30"), listOf("z31"))
+        // e33 only ever fires as a relay from A0's own two "leaving Выдача жетона"
+        // transitions (see buildA0) - never independently, so this can't race with
+        // A0 still being mid-dispensing (the x01&x02 self-loop doesn't relay it).
+        .transition(1, 0, "e33", listOf(), listOf("z32", "z31"))
         .build()
 }
 
