@@ -26,11 +26,15 @@ object GameJackpot {
         .automationStateEvent("y1=2", "A1", "Жетон не распознан", 2)
         .automationStateEvent("y1!=2", "A1", "y1!=2", 2, false)
         .automationStateEvent("y2=0", "A2", "Барабаны прокручены", 0)
+        // A3 (джекпот-счётчик) вложен в те же две вершины, где он реально нужен:
+        // "Игра" (вместе с A2, пока идёт раунд) и "Выдача жетона" (чтобы его
+        // переход-сброс e06 применялся, будучи по-настоящему вложенным и там).
+        // Порядок ["A3","A2"] в nestedFsmIds важен: см. buildA3 про y2=3.
         .state(0, "Ожидание", listOf("z03", "z13", "z12", "e14"))
         .state(1, "Прием жетонов")
-        .state(2, "Игра", listOf("e0"), nestedFsmIds = listOf("A2"))
+        .state(2, "Игра", listOf("e0"), nestedFsmIds = listOf("A3", "A2"))
         .state(3, "Ошибка")
-        .state(4, "Выдача жетона")
+        .state(4, "Выдача жетона", nestedFsmIds = listOf("A3"))
 // 0
         .transition(0, 1, "e11", listOf("y1=1"))
         .transition(0, 3, "e11", listOf("y1=2"), listOf("z02"))
@@ -93,7 +97,6 @@ object GameJackpot {
         .automationEvent("e0", "A0", "Начало игры")
         .automationEvent("e01", "A0", "Нажата кнопка «Игра»")
         .automationEvent("e05", "A0", "Сработал таймер третьего барабана")
-        .automationEvent("e07", "A3", "Сработал таймер третьего барабана (проверка джекпот-комбинации)")
         .environmentEvent("e23", "Сработал таймер второго барабана")
         .environmentEvent("e22", "Сработал таймер первого барабана")
         .state(0, "Барабаны остановлены")
@@ -105,28 +108,19 @@ object GameJackpot {
         // z23/z25 moved off the state declaration and onto the entering transition:
         // state-level enterEventsId gets folded into the composite state's identity
         // (CalculateStateWithEntriesId), so every extra internal move A3 makes while
-        // nested here (e15/e07/e06) re-derives a "revisit" of state 3 with a
-        // different accumulated enterEventsId set than the original entry - same
-        // name, different identity, hence the duplicate-name states the diagnostics
-        // flagged. Transition-level enterEventsId is a one-shot edge label, not part
-        // of state identity, so it doesn't get smeared this way.
+        // nested here re-derives a "revisit" with a different accumulated
+        // enterEventsId set than the original entry - same name, different
+        // identity, hence duplicate-name states. Transition-level enterEventsId is
+        // a one-shot edge label, not part of state identity, so it isn't smeared.
         .transition(1, 2, "e22", enterEventsId = listOf("z23"))
         .transition(2, 3, "e23", enterEventsId = listOf("z25"))
-        // Relay e07 to A3 exactly when the reel-stop timer fires, instead of letting
-        // A3 collect the jackpot combo autonomously at any point while nested here
-        // (that was reachable even before the reels finished spinning). A3 is no
-        // longer declared as nested in this state either - nested-autonomous
-        // eligibility in this engine applies to ANY automation-typed transition a
-        // nested child owns, regardless of who the event is "from", so as long as
-        // A3 was nested here e07 stayed independently reachable no matter what it
-        // was relayed through. Un-nesting and going through the relay exclusively
-        // is what actually closes that path.
-        .transition(3, 0, "e05", enterEventsId = listOf("z27", "z28", "e07"))
+        .transition(3, 0, "e05", enterEventsId = listOf("z27", "z28"))
         .build()
 
     fun buildA3() = AutomatonBuilder("Джекпот-счётчик", listOf("A3"))
         .automationEvent("e15", "A1", "Жетон зачислен в банк")
-        .automationEvent("e07", "A2", "Сработал таймер третьего барабана (проверка джекпот-комбинации)")
+        .automationEvent("e05", "A0", "Сработал таймер третьего барабана")
+        .automationStateEvent("y2=3", "A2", "Второй барабан остановлен", 3)
         .environmentEvent("z30", "Увеличить сумму джекпота")
         .environmentEvent("z31", "Обновить индикатор «Джекпот»")
         .environmentEvent("z32", "Обнулить джекпот")
@@ -136,13 +130,20 @@ object GameJackpot {
         .state(0, "Накопление")
         .state(1, "Выплата джекпота")
         .transition(0, 0, "e15", listOf(), listOf("z30", "z31"))
-        // e07 only ever fires as a relay from A2's own e05 (reel-stop) transition, so
-        // the jackpot-combo check happens exactly once the reels have stopped, never
-        // while A2 is still mid-cycle. x_jp is the random check ("x > 0.8"). No relay
-        // back to A0: A0 already reaches "Выдача жетона" via its own e05 branch in
-        // lockstep with the same reel-stop event, so a second independent path into
-        // the same state (via e31) only created a race between the two - removed.
-        .transition(0, 1, "e07", listOf("x_jp"), listOf("z31"))
+        // A3 по-настоящему вложен в "Игра" вместе с A2 и реагирует на ТОТ ЖЕ самый
+        // "e05", которым барабаны заканчивают свой цикл - гвард y2=3 (барабаны
+        // ещё во "Второй барабан остановлен", т.е. прямо перед тем как e05
+        // переведёт их в state0) гарантирует, что проверка комбинации возможна
+        // строго в этот момент, а не когда угодно во время вложенности.
+        // x_jp - случайная проверка ("x > 0.8").
+        //
+        // Порядок nestedFsmIds=["A3","A2"] у A0.state(2) обязателен: реальный
+        // исполнитель (Modulator.executeWithNested) обходит вложенных соседей по
+        // порядку списка. Если бы A2 шёл первым, к моменту проверки A3 барабаны
+        // уже сбросились бы сами (e05 у них безусловный), и y2=3 никогда не
+        // выполнялся бы - именно этот порядок и делает возможной синхронную
+        // проверку.
+        .transition(0, 1, "e05", listOf("y2=3", "x_jp"), listOf("z31"))
         .transition(1, 0, "e06", listOf("!x01"), listOf("z32", "z31"))
         .build()
 }

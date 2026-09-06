@@ -202,6 +202,7 @@ class Multiplier(
                         it2 !in it.state.first.automaton.id + it.state.second.automaton.id
                     },
                 referencesUUID = it.state.first.state.referencesUUID + it.state.second.state.referencesUUID + it.state.first.state.uuid + it.state.second.state.uuid,
+                nativeStateByAutomaton = it.state.first.state.nativeStateByAutomaton + it.state.second.state.nativeStateByAutomaton,
             )
         }
 

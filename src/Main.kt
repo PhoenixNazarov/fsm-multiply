@@ -46,6 +46,15 @@ data class State(
 
     val uuid: UUID = UUID.randomUUID(),
     val referencesUUID: List<UUID> = listOf(),
+
+    // Maps each ORIGINAL (leaf) automaton id that has ever been folded into this
+    // state to that automaton's own native state id at this point. `id` above is
+    // only meaningful within the automaton this exact State belongs to - once two
+    // automata are multiplied together, the result gets a fresh, unrelated
+    // numbering, so `id` can no longer answer "what state is automaton X in" for
+    // any X that was folded in earlier. This map is what AutomationStateEventInput
+    // guards should consult instead: it survives every multiplication step.
+    val nativeStateByAutomaton: Map<String, Int> = mapOf(),
 )
 
 data class Transition(
@@ -198,7 +207,10 @@ class AutomatonBuilder(
                 error("State already exist with $id")
             }
             checkEventsId(enterEventsId)
-            states += State(name = name, id = id, enterEventsId = enterEventsId, nestedFsmIds = nestedFsmIds)
+            states += State(
+                name = name, id = id, enterEventsId = enterEventsId, nestedFsmIds = nestedFsmIds,
+                nativeStateByAutomaton = this.id.associateWith { id },
+            )
         }
 
     fun transition(
@@ -334,10 +346,17 @@ data class CalculateAutomatonSpawn2(
                         if (it2.automationId !in subCalculateAutomaton.automaton.id) {
                             return@all true
                         }
+                        // subCalculateAutomaton.state.id is only that automaton's OWN id
+                        // while it is still native (unmerged). Once it has already been
+                        // folded into a bigger composite by an earlier multiplication
+                        // step, its `id` is a fresh, unrelated number - nativeStateByAutomaton
+                        // is what actually survives across every step.
+                        val actualStateId = subCalculateAutomaton.state.nativeStateByAutomaton[it2.automationId]
+                            ?: subCalculateAutomaton.state.id
                         if (it2.eq) {
-                            subCalculateAutomaton.state.id == it2.stateId
+                            actualStateId == it2.stateId
                         } else {
-                            subCalculateAutomaton.state.id != it2.stateId
+                            actualStateId != it2.stateId
                         }
                     }
                 }
