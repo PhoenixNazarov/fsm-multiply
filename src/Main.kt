@@ -177,6 +177,120 @@ data class Automaton(
 
         return res
     }
+
+    // Same "group by source/target automaton" split as toPins(), but flattened
+    // into two parallel (группа, id, описание) lists, ready to be laid out
+    // side by side (входы слева, выходы справа) instead of toPins()'s nested
+    // indented text.
+    private fun pinRows(): Pair<List<Triple<String, String, String>>, List<Triple<String, String, String>>> {
+        fun group(event: EventInput) = when (event) {
+            is EnvironmentEventInput -> "Среда"
+            is AutomationEventInput -> event.automationId
+            is AutomationStateEventInput -> event.automationId
+        }
+
+        fun collect(ids: Set<String>) = events.filter { it.id in ids }.sortedBy { it.id }
+            .map { Triple(group(it), it.id, it.description ?: "") }
+
+        val inputEvents = (transitions.map { it.eventId } + transitions.flatMap { it.inputIds }).toSet()
+        val outputEvents = (transitions.flatMap { it.enterEventsId } + states.flatMap { it.enterEventsId }).toSet()
+        return collect(inputEvents) to collect(outputEvents)
+    }
+
+    // Plain-text рендер той же самой таблицы "входы слева / выходы справа",
+    // что и в отчётах: группа печатается только на первой строке группы
+    // (имитация объединённых ячеек в таблице), дальше - пустая ячейка.
+    fun toPinsTable(): String {
+        val (inputs, outputs) = pinRows()
+        val rows = maxOf(inputs.size, outputs.size, 1)
+
+        val groupW = maxOf((inputs + outputs).maxOfOrNull { it.first.length } ?: 0, "Группа".length)
+        val descW = maxOf((inputs + outputs).maxOfOrNull { it.third.length } ?: 0, "Описание".length)
+        val idW = maxOf((inputs + outputs).maxOfOrNull { it.second.length } ?: 0, "id".length)
+
+        fun cell(s: String, w: Int) = s.padEnd(w)
+
+        val sb = StringBuilder()
+        sb.appendLine("Входы и выходы для \"«$name» ($idStr)\"")
+        sb.appendLine(
+            "${cell("Группа", groupW)} | ${cell("Описание", descW)} | ${cell("id", idW)} || " +
+                "${cell("id", idW)} | ${cell("Описание", descW)} | Группа"
+        )
+        sb.appendLine("-".repeat(groupW + descW + idW * 2 + descW + groupW + 12))
+
+        var lastInGroup: String? = null
+        var lastOutGroup: String? = null
+        for (i in 0 until rows) {
+            val inp = inputs.getOrNull(i)
+            val out = outputs.getOrNull(i)
+            val inGroup = if (inp != null && inp.first != lastInGroup) inp.first.also { lastInGroup = it } else ""
+            val outGroup = if (out != null && out.first != lastOutGroup) out.first.also { lastOutGroup = it } else ""
+            sb.appendLine(
+                "${cell(inGroup, groupW)} | ${cell(inp?.third ?: "", descW)} | ${cell(inp?.second ?: "", idW)} || " +
+                    "${cell(out?.second ?: "", idW)} | ${cell(out?.third ?: "", descW)} | $outGroup"
+            )
+        }
+        return sb.toString()
+    }
+
+    // HTML-вариант той же таблицы для вставки в отчёты: классы (pins-block,
+    // pins-title, pins-table, grp, id-cell) соответствуют вёрстке отчёта -
+    // достаточно один раз подключить её CSS.
+    fun toPinsHtml(): String {
+        val (inputs, outputs) = pinRows()
+        val rows = maxOf(inputs.size, outputs.size, 1)
+
+        fun rowSpans(items: List<Triple<String, String, String>>): List<Int> {
+            val spans = MutableList(items.size) { 0 }
+            var i = 0
+            while (i < items.size) {
+                var j = i
+                while (j < items.size && items[j].first == items[i].first) j++
+                spans[i] = j - i
+                i = j
+            }
+            return spans
+        }
+
+        fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+        val inSpans = rowSpans(inputs)
+        val outSpans = rowSpans(outputs)
+
+        val body = StringBuilder()
+        for (i in 0 until rows) {
+            body.append("      <tr>")
+            if (i < inputs.size) {
+                val (group, id, desc) = inputs[i]
+                if (inSpans[i] > 0) body.append("<td class=\"grp\" rowspan=\"${inSpans[i]}\">${esc(group)}</td>")
+                body.append("<td>${esc(desc)}</td><td class=\"id-cell\">${esc(id)}</td>")
+            } else {
+                body.append("<td></td><td></td><td></td>")
+            }
+            if (i < outputs.size) {
+                val (group, id, desc) = outputs[i]
+                body.append("<td class=\"id-cell\">${esc(id)}</td><td>${esc(desc)}</td>")
+                if (outSpans[i] > 0) body.append("<td class=\"grp\" rowspan=\"${outSpans[i]}\">${esc(group)}</td>")
+            } else {
+                body.append("<td></td><td></td><td></td>")
+            }
+            body.append("</tr>\n")
+        }
+
+        return """
+            |<div class="pins-block">
+            |  <div class="pins-title">«$name» ($idStr)</div>
+            |  <table class="pins-table">
+            |    <thead>
+            |      <tr><th colspan="3">Входы</th><th colspan="3">Выходы</th></tr>
+            |      <tr><th>Группа</th><th>Описание</th><th>id</th><th>id</th><th>Описание</th><th>Группа</th></tr>
+            |    </thead>
+            |    <tbody>
+            |$body    </tbody>
+            |  </table>
+            |</div>
+        """.trimMargin()
+    }
 }
 
 class AutomatonBuilder(
