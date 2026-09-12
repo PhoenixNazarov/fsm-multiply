@@ -178,30 +178,79 @@ data class Automaton(
         return res
     }
 
+    private fun ownInputIds(): Set<String> =
+        (transitions.map { it.eventId } + transitions.flatMap { it.inputIds }).toSet()
+
+    private fun ownOutputIds(): Set<String> =
+        (transitions.flatMap { it.enterEventsId } + states.flatMap { it.enterEventsId }).toSet()
+
     // Same "group by source/target automaton" split as toPins(), but flattened
     // into two parallel (группа, id, описание) lists, ready to be laid out
     // side by side (входы слева, выходы справа) instead of toPins()'s nested
     // indented text.
-    private fun pinRows(): Pair<List<Triple<String, String, String>>, List<Triple<String, String, String>>> {
+    //
+    // `others` lets outputs be completed symmetrically: a sibling automaton
+    // may declare one of ITS OWN events as coming from this automaton
+    // (automationId == this.id) and actually react to it (i.e. it's in the
+    // sibling's own INPUT set) without this automaton ever explicitly
+    // relaying it via enterEventsId - e.g. a plain environment event that a
+    // nested sibling reacts to independently (see the "nested-autonomous
+    // eligibility" trap in the report). Such events are genuinely produced
+    // by this automaton and belong in its output list even though its own
+    // transitions never name them. A sibling event the sibling itself
+    // RELAYS (i.e. in the sibling's own output set) is the opposite
+    // direction and is correctly left out here.
+    private fun pinRows(
+        others: List<Automaton> = listOf()
+    ): Pair<List<Triple<String, String, String>>, List<Triple<String, String, String>>> {
         fun group(event: EventInput) = when (event) {
             is EnvironmentEventInput -> "Среда"
             is AutomationEventInput -> event.automationId
             is AutomationStateEventInput -> event.automationId
         }
 
-        fun collect(ids: Set<String>) = events.filter { it.id in ids }.sortedBy { it.id }
-            .map { Triple(group(it), it.id, it.description ?: "") }
+        // Sort by id first, then bucket by group - groupBy keeps each key's
+        // rows contiguous regardless of how they were interleaved by id, so
+        // a group never gets split into two runs by an unrelated id sorting
+        // between them.
+        fun cluster(rows: List<Triple<String, String, String>>) =
+            rows.sortedBy { it.second }.groupBy { it.first }.flatMap { it.value }
 
-        val inputEvents = (transitions.map { it.eventId } + transitions.flatMap { it.inputIds }).toSet()
-        val outputEvents = (transitions.flatMap { it.enterEventsId } + states.flatMap { it.enterEventsId }).toSet()
-        return collect(inputEvents) to collect(outputEvents)
+        val inputIds = ownInputIds()
+        val outputIds = ownOutputIds()
+
+        val ownInputs = events.filter { it.id in inputIds }.map { Triple(group(it), it.id, it.description ?: "") }
+        val ownOutputs = events.filter { it.id in outputIds }.map { Triple(group(it), it.id, it.description ?: "") }
+
+        val seenOutIds = ownOutputs.map { it.second }.toSet()
+        val crossOutputs = others.filter { sibling -> sibling.id.none { it in this.id } }
+            .flatMap { sibling ->
+                val siblingInputIds = sibling.ownInputIds()
+                sibling.events.mapNotNull { ev ->
+                    val targetId = when (ev) {
+                        is AutomationEventInput -> ev.automationId
+                        is AutomationStateEventInput -> ev.automationId
+                        else -> null
+                    }
+                    if (targetId != null && targetId in this.id && ev.id in siblingInputIds && ev.id !in seenOutIds) {
+                        Triple(sibling.id.joinToString(""), ev.id, ev.description ?: "")
+                    } else null
+                }
+            }
+
+        // Dedup by (group, id), not id alone: the same event can genuinely be
+        // consumed by several different siblings at once (e.g. a plain "e05"
+        // timer tick that TWO different nested automata react to
+        // independently) and each of those is a distinct edge worth showing,
+        // even though they share an id.
+        return cluster(ownInputs) to cluster((ownOutputs + crossOutputs).distinctBy { it.first to it.second })
     }
 
     // Plain-text рендер той же самой таблицы "входы слева / выходы справа",
     // что и в отчётах: группа печатается только на первой строке группы
     // (имитация объединённых ячеек в таблице), дальше - пустая ячейка.
-    fun toPinsTable(): String {
-        val (inputs, outputs) = pinRows()
+    fun toPinsTable(others: List<Automaton> = listOf()): String {
+        val (inputs, outputs) = pinRows(others)
         val rows = maxOf(inputs.size, outputs.size, 1)
 
         val groupW = maxOf((inputs + outputs).maxOfOrNull { it.first.length } ?: 0, "Группа".length)
@@ -236,8 +285,8 @@ data class Automaton(
     // HTML-вариант той же таблицы для вставки в отчёты: классы (pins-block,
     // pins-title, pins-table, grp, id-cell) соответствуют вёрстке отчёта -
     // достаточно один раз подключить её CSS.
-    fun toPinsHtml(): String {
-        val (inputs, outputs) = pinRows()
+    fun toPinsHtml(others: List<Automaton> = listOf()): String {
+        val (inputs, outputs) = pinRows(others)
         val rows = maxOf(inputs.size, outputs.size, 1)
 
         fun rowSpans(items: List<Triple<String, String, String>>): List<Int> {
