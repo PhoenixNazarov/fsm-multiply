@@ -340,6 +340,77 @@ data class Automaton(
             |</div>
         """.trimMargin()
     }
+
+    // LaTeX-вариант той же таблицы: группы объединяются через \multirow,
+    // \cline проводится только там, где ОБЕ стороны действительно
+    // заканчивают свою группу на этой строке (иначе разделительная линия
+    // резала бы середину ещё не закрытой группы напротив).
+    fun toPinsLatex(others: List<Automaton> = listOf()): String {
+        val (inputs, outputs) = pinRows(others)
+        val rows = maxOf(inputs.size, outputs.size, 1)
+
+        fun rowSpans(items: List<Triple<String, String, String>>): List<Int> {
+            val spans = MutableList(items.size) { 0 }
+            var i = 0
+            while (i < items.size) {
+                var j = i
+                while (j < items.size && items[j].first == items[i].first) j++
+                spans[i] = j - i
+                i = j
+            }
+            return spans
+        }
+
+        fun esc(s: String) = s
+            .replace("\\", "\\textbackslash{}")
+            .replace("&", "\\&").replace("%", "\\%").replace("#", "\\#").replace("_", "\\_")
+            .replace("«", "<<").replace("»", ">>")
+
+        fun code(s: String) = "\\texttt{${esc(s)}}"
+
+        val inSpans = rowSpans(inputs)
+        val outSpans = rowSpans(outputs)
+
+        val lines = mutableListOf<String>()
+        for (i in 0 until rows) {
+            val left = if (i < inputs.size) {
+                val (group, id, desc) = inputs[i]
+                val g = if (inSpans[i] > 0) "\\multirow{${inSpans[i]}}{*}{${esc(group)}}" else ""
+                listOf(g, esc(desc), code(id))
+            } else listOf("", "", "")
+            val right = if (i < outputs.size) {
+                val (group, id, desc) = outputs[i]
+                val g = if (outSpans[i] > 0) "\\multirow{${outSpans[i]}}{*}{${esc(group)}}" else ""
+                listOf(code(id), esc(desc), g)
+            } else listOf("", "", "")
+            lines += (left + right).joinToString(" & ") + " \\\\"
+
+            if (i == rows - 1) continue
+            val leftCloses = i + 1 >= inputs.size || inSpans[i + 1] > 0
+            val rightCloses = i + 1 >= outputs.size || outSpans[i + 1] > 0
+            when {
+                leftCloses && rightCloses -> lines += "\\cline{1-3}\\cline{4-6}"
+                leftCloses -> lines += "\\cline{1-3}"
+                rightCloses -> lines += "\\cline{4-6}"
+            }
+        }
+
+        return """
+            |\begin{table}[h]
+            |\centering
+            |\caption{Входные и выходные события автомата «$name» ($idStr)}
+            |\small
+            |\begin{tabular}{@{}p{1.3cm}p{4.6cm}l|lp{4.6cm}p{1.3cm}@{}}
+            |\toprule
+            |\multicolumn{3}{c}{Входы} & \multicolumn{3}{c}{Выходы} \\
+            |Группа & Описание & id & id & Описание & Группа \\
+            |\midrule
+            |${lines.joinToString("\n")}
+            |\bottomrule
+            |\end{tabular}
+            |\end{table}
+        """.trimMargin()
+    }
 }
 
 class AutomatonBuilder(
