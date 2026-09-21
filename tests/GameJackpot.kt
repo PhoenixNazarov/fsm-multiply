@@ -44,7 +44,19 @@ object GameJackpot {
         .state(1, "Прием жетонов")
         .state(2, "Игра", listOf("e0"), nestedFsmIds = listOf("A3", "A2"))
         .state(3, "Ошибка")
-        .state(4, "Выдача жетона")
+        // A4 (звуки) вложен здесь, но - в отличие от A3/A2 в "Игра" - реагирует
+        // на СВОЙ e06, объявленный как automationEvent("e06","A0",...) (та же
+        // схема, что e05 у A2/A3): это делает его самопереход независимо
+        // достижимым ровно тогда и только тогда, когда родитель находится в
+        // "Выдача жетона" (nestedFsmIds ниже), а не всегда, как было бы с
+        // обычным environmentEvent с тем же именем. Guard-набор A4 пуст (только
+        // безусловный самопереход), поэтому он не добавляет новых терминов -
+        // звук проигрывается на каждый e06 независимо от исхода (самопереход,
+        // ошибка или обычная выдача), без риска Trap 2 (никаких новых guard'ов)
+        // или Trap 1 (реагирует только на то же "e06", которое A0 и так уже
+        // обрабатывает в этом состоянии - не на фантомный, отдельно вложенный
+        // сигнал).
+        .state(4, "Выдача жетона", nestedFsmIds = listOf("A4"))
 // 0
         .transition(0, 1, "e11", listOf("y1=1"))
         .transition(0, 3, "e11", listOf("y1=2"), listOf("z02"))
@@ -175,6 +187,13 @@ object GameJackpot {
         // A0 still being mid-dispensing (the x01&x02 self-loop doesn't relay it).
         .transition(1, 0, "e33", listOf(), listOf("z32", "z31"))
         .build()
+
+    fun buildA4() = AutomatonBuilder("Звуки", listOf("A4"))
+        .automationEvent("e06", "A0", "Выдан жетон из банка")
+        .environmentEvent("z40", "Проиграть звук выдачи жетона")
+        .state(0, "Ожидание")
+        .transition(0, 0, "e06", listOf(), listOf("z40"))
+        .build()
 }
 
 fun main() {
@@ -182,11 +201,12 @@ fun main() {
     val a1 = GameJackpot.buildA1()
     val a2 = GameJackpot.buildA2()
     val a3 = GameJackpot.buildA3()
+    val a4 = GameJackpot.buildA4()
 
-    val res = multiplyChain(a0, a1, a2, a3)
+    val res = multiplyChain(a0, a1, a2, a3, a4)
 
 //    println()
 //    println(res.toUML())
 
-    checkEquivalence(listOf(a0, a1, a2, a3), res)
+    checkEquivalence(listOf(a0, a1, a2, a3, a4), res)
 }
