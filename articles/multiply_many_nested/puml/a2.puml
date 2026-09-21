@@ -1,0 +1,15 @@
+@startuml
+skinparam backgroundColor white
+state "Игровые барабаны (A2)" as A2 {
+    [*] --> A20
+    state "Барабаны остановлены" as A20 :  
+    state "Барабаны запущены" as A21 :  
+    state "Первый барабан остановлен" as A22 :  
+    state "Второй барабан остановлен" as A23 :  
+    A20 --> A21 : <u>A0(e0)\nz20
+    A21 --> A21 : <u>A0(e01)\nz21
+    A21 --> A22 : <u>e22\nz23
+    A22 --> A23 : <u>e23\nz25
+    A23 --> A20 : <u>A0(e05)\nz27,z28
+}
+@enduml

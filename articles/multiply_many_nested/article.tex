@@ -11,8 +11,6 @@
 \usepackage{multirow}
 \usepackage{graphicx}
 \usepackage{hyperref}
-\usepackage{tikz}
-\usetikzlibrary{automata, arrows.meta, positioning}
 
 \hypersetup{
   colorlinks=true,
@@ -26,7 +24,13 @@
 \author{}
 \date{\today}
 
+% Диаграммы состояний рендерятся напрямую из исходников PlantUML
+% (puml/*.puml - буквальный вывод Automaton.toUML()) во время компиляции.
+% Требуется: команда `plantuml` (и Java) в PATH, и компиляция с флагом
+% -shell-escape (pdflatex -shell-escape article.tex), иначе \write18 ниже
+% откажет молча и .png не появятся.
 \begin{document}
+\immediate\write18{plantuml -tpng puml/a0.puml puml/a1.puml puml/a2.puml puml/a3.puml puml/final.puml}
 \maketitle
 
 \noindent
@@ -62,41 +66,8 @@
 
 \begin{figure}[h]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-  >=Stealth, auto,
-  every state/.style={minimum size=1.5cm, line width=0.7pt, font=\scriptsize, align=center},
-  every edge/.style={draw, ->, font=\scriptsize}
-]
-  \node[state, initial, initial text=] (S0) at (0,0) {Ожидание};
-  \node[state] (S1) at (5,0) {Приём\\жетонов};
-  \node[state] (S2) at (10,0) {Игра};
-  \node[state] (S4) at (15,0) {Выдача\\жетона};
-  \node[state] (S3) at (7.5,-4.2) {Ошибка};
-
-  \path[->]
-    (S0) edge[bend left=12] node {$e_{11}\ \&\ y_1{=}1$} (S1)
-    (S1) edge[bend left=12] node[swap] {$d_{02}$} (S0)
-    (S1) edge node {$e_{01}\ \&\ y_1{=}1$} (S2)
-    (S4) edge[loop above] node {$e_{06}\ \&\ x_{01}x_{02}$} (S4)
-    (S2) edge[bend left=12] node {$e_{05}\ \&\ y_2{=}0\ \&\ x_{01}x_{02}$} (S4)
-    (S4) edge[bend left=12] node {$e_{05}\ \&\ y_2{=}0\ \&\ \lnot x_{01}\ \&\ y_3{=}1$} (S2);
-
-  \draw[->] (S0) to[out=-55, in=160] node[pos=0.35, sloped, below]
-    {$e_{11}\ \&\ y_1{=}2$} (S3);
-  \draw[->] (S1) to[out=-80, in=90] node[pos=0.5, sloped, above]
-    {$e_{11}\ \&\ y_1{=}2$} (S3);
-  \draw[->] (S4) to[out=-140, in=20] node[pos=0.6, sloped, above]
-    {$e_{06}\ \&\ x_{01}\lnot x_{02}$} (S3);
-  \draw[->] (S3) to[out=170, in=-70] node[pos=0.45, sloped, below, align=center]
-    {$e_{03}\ \&\ y_1{\neq}2$ \ / \ $d_{02}\ \&\ y_1{=}2$} (S0);
-  \draw[->] (S2) to[bend right=35] node[pos=0.5, sloped, above]
-    {$e_{05}\ \&\ y_2{=}0\ \&\ \lnot x_{01}\ \&\ y_3{\neq}1$} (S0);
-  \draw[->] (S4) to[bend right=50] node[pos=0.5, sloped, above]
-    {$e_{06}\ \&\ \lnot x_{01}$} (S0);
-\end{tikzpicture}%
-}
-\caption{Диаграмма состояний автомата $A_0$.}
+\includegraphics[width=0.95\textwidth]{puml/a0.png}
+\caption{Диаграмма состояний автомата $A_0$ (PlantUML, из \texttt{puml/a0.puml}).}
 \end{figure}
 
 \input{table_a0.tex}
@@ -106,29 +77,8 @@
 
 \begin{figure}[h]
 \centering
-\begin{tikzpicture}[
-  >=Stealth, auto,
-  every state/.style={minimum size=1.6cm, line width=0.7pt, font=\scriptsize, align=center},
-  every edge/.style={draw, ->, font=\scriptsize}
-]
-  \node[state, initial, initial text=] (S0) at (0,0) {Монето-\\приёмник\\пуст};
-  \node[state] (S1) at (4.5,0) {Жетон\\принят};
-  \node[state] (S3) at (9,0) {Монето-\\приёмник\\закрыт};
-  \node[state] (S2) at (4.5,-3.2) {Жетон не\\распознан};
-
-  \path[->]
-    (S0) edge[bend left=15] node {$e_{10}\ \&\ x_{11}\ \&\ y_3{\neq}1$} (S1)
-    (S1) edge[loop above] node {$e_{10}\ \&\ x_{11}\ \&\ y_3{\neq}1$} (S1)
-    (S1) edge node {$e_{12}$} (S3)
-    (S0) edge node[swap] {$e_{10}\ \&\ \lnot x_{11}\ \&\ y_3{\neq}1$} (S2)
-    (S1) edge node[swap] {$e_{10}\ \&\ \lnot x_{11}\ \&\ y_3{\neq}1$} (S2);
-
-  \draw[->] (S1) to[bend right=15] node[swap] {$e_{02}$} (S0);
-  \draw[->] (S2) to[bend left=45] node[pos=0.5, below] {$e_{02}$} (S0);
-  \draw[->, rounded corners=3pt] (S3) -- ++(0,-1.2) -| (-2,-5.4) |- (S0.west)
-    node[pos=0.55, below] {$e_{14}$};
-\end{tikzpicture}
-\caption{Диаграмма состояний автомата $A_1$.}
+\includegraphics[width=0.75\textwidth]{puml/a1.png}
+\caption{Диаграмма состояний автомата $A_1$ (PlantUML, из \texttt{puml/a1.puml}).}
 \end{figure}
 
 \input{table_a1.tex}
@@ -137,24 +87,8 @@
 
 \begin{figure}[h]
 \centering
-\begin{tikzpicture}[
-  >=Stealth, auto,
-  every state/.style={minimum size=1.6cm, line width=0.7pt, font=\scriptsize, align=center},
-  every edge/.style={draw, ->, font=\scriptsize}
-]
-  \node[state, initial, initial text=] (S0) at (0,0) {Барабаны\\остановлены};
-  \node[state] (S1) at (4.5,0) {Барабаны\\запущены};
-  \node[state] (S2) at (9,0) {1-й барабан\\остановлен};
-  \node[state] (S3) at (13.5,0) {2-й барабан\\остановлен};
-
-  \path[->]
-    (S0) edge node {$e_0$} (S1)
-    (S1) edge[loop above] node {$e_{01}$} (S1)
-    (S1) edge node {$e_{22}$} (S2)
-    (S2) edge node {$e_{23}$} (S3);
-  \draw[->] (S3) to[bend left=35] node[pos=0.5, below] {$e_{05}$} (S0);
-\end{tikzpicture}
-\caption{Диаграмма состояний автомата $A_2$.}
+\includegraphics[width=0.6\textwidth]{puml/a2.png}
+\caption{Диаграмма состояний автомата $A_2$ (PlantUML, из \texttt{puml/a2.puml}).}
 \end{figure}
 
 \input{table_a2.tex}
@@ -164,23 +98,9 @@
 
 \begin{figure}[h]
 \centering
-\begin{tikzpicture}[
-  >=Stealth, auto,
-  every state/.style={minimum size=2.1cm, line width=0.8pt, align=center},
-  every edge/.style={draw, ->}
-]
-  \node[state, initial, initial text=] (S0) {Накопление};
-  \node[state, right=4.2cm of S0] (S1) {Выплата\\джекпота};
-
-  \path[->]
-    (S0) edge[bend left=18] node[align=center, font=\small]
-         {$e_{05}\ \&\ y_2{=}3\ \&\ x_{30}$} (S1)
-    (S1) edge[bend left=18] node[align=center, font=\small]
-         {$e_{33}$} (S0)
-    (S0) edge[loop above] node[align=center, font=\small]
-         {$e_{05}\ \&\ y_2{=}3\ \&\ \lnot x_{30}$} (S0);
-\end{tikzpicture}
-\caption{Диаграмма состояний автомата $A_3$ --- нового вложенного автомата.}
+\includegraphics[width=0.4\textwidth]{puml/a3.png}
+\caption{Диаграмма состояний автомата $A_3$ (PlantUML, из \texttt{puml/a3.puml})
+  --- нового вложенного автомата.}
 \end{figure}
 
 \input{table_a3.tex}
@@ -195,60 +115,10 @@
 
 \begin{figure}[h]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[
-  every state/.style={minimum size=1.7cm, line width=0.7pt, font=\scriptsize, align=center},
-  every edge/.style={draw, ->, font=\scriptsize},
-  >=Stealth
-]
-  \node[state, initial, initial text=] (S0) at (0,0) {Ожидание};
-  \node[state] (S1) at (4,0) {Приём\\жетонов};
-  \node[state] (S7) at (0,-3) {Ошибка};
-  \node[state] (S2) at (8,0) {Игра:\\барабаны\\запущены};
-  \node[state] (S3) at (8,-3) {Игра:\\1-й барабан\\остановлен};
-  \node[state] (S4) at (12,-3) {Игра:\\2-й барабан\\остановлен};
-  \node[state] (S5) at (12,-6) {Выдача +\\Выплата\\джекпота};
-  \node[state] (S6) at (16,-6) {Выдача +\\Накопление};
-  \node[state] (S8) at (16,-9) {Ошибка\\(нет\\жетонов)};
-
-  \path[->]
-    (S0) edge[bend left=12] node {$e_{10}\ \&\ x_{11}$} (S1)
-    (S0) edge node[swap] {$e_{10}\ \&\ \lnot x_{11}$} (S7)
-    (S1) edge[bend left=12] node[swap] {$d_{02}$} (S0)
-    (S7) edge[bend left=15] node[swap] {$d_{02}$} (S0)
-    (S1) edge node {$e_{01}$} (S2)
-    (S1) edge[loop above] node {$e_{10}\ \&\ x_{11}$} (S1)
-    (S1) edge[bend right=12] node[swap,pos=0.3] {$e_{10}\ \&\ \lnot x_{11}$} (S7)
-    (S2) edge[loop above] node {$e_{01}$} (S2)
-    (S2) edge node {$e_{22}$} (S3)
-    (S3) edge node {$e_{23}$} (S4)
-    (S4) edge node[align=center] {$e_{05}\ \&\ x_{30}$} (S5)
-    (S4) edge node[swap,align=center]
-         {$e_{05}\ \&\ \lnot x_{30}\ \&\ x_{01}x_{02}$} (S6)
-    (S5) edge[loop left] node {$e_{06}\ \&\ x_{01}x_{02}$} (S5)
-    (S6) edge[loop right] node {$e_{06}\ \&\ x_{01}x_{02}$} (S6)
-    (S5) edge node {$e_{06}\ \&\ x_{01}\lnot x_{02}$} (S8)
-    (S6) edge node[swap] {$e_{06}\ \&\ x_{01}\lnot x_{02}$} (S8)
-    (S8) edge[bend left=15] node[swap] {$e_{03}$} (S0);
-
-  % Длинные переходы сброса в "Ожидание" разведены по внешнему контуру,
-  % чтобы не пересекать основной поток диаграммы.
-  \draw[->, rounded corners=4pt]
-    (S4) -- ++(0,-1.0) -| (-2.5,-10.0) |- (S0.west)
-    node[pos=0.28, above, sloped, font=\scriptsize]
-      {$e_{05}\ \&\ \lnot x_{30}\ \&\ \lnot x_{01}$};
-  \draw[->, rounded corners=4pt]
-    (S5) -- ++(0,-0.9) -| (-3.0,-10.5) |- (S0.west)
-    node[pos=0.30, above, sloped, font=\scriptsize] {$e_{06}\ \&\ \lnot x_{01}$};
-  \draw[->, rounded corners=4pt]
-    (S6) -- ++(0,-1.6) -| (-3.5,-11.0) |- (S0.west)
-    node[pos=0.32, above, sloped, font=\scriptsize] {$e_{06}\ \&\ \lnot x_{01}$};
-\end{tikzpicture}%
-}
+\includegraphics[width=\textwidth]{puml/final.png}
 \caption{Диаграмма состояний итогового автомата
-  $A_0\times A_1\times A_2\times A_3$ (9 состояний). Три длинных перехода
-  сброса в «Ожидание» (из $q_4$, $q_5$, $q_6$) намеренно разведены по
-  внешнему контуру, чтобы не пересекать основной поток диаграммы.}
+  $A_0\times A_1\times A_2\times A_3$ (PlantUML, из \texttt{puml/final.puml};
+  9 состояний).}
 \end{figure}
 
 \input{table_final.tex}

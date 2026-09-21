@@ -1,0 +1,24 @@
+@startuml
+skinparam backgroundColor white
+state "Игровая машина (A0)" as A0 {
+    [*] --> A00
+    state "Ожидание" as A00 :  z03,z13,z12,A1(e14)
+    state "Прием жетонов" as A01 :  
+    state "Игра" as A02 : A3,A2\n A2(e0)
+    state "Ошибка" as A03 :  
+    state "Выдача жетона" as A04 :  
+    A00 --> A01 : <u>A1(e11) & y1=1\n~
+    A00 --> A03 : <u>A1(e11) & y1=2\nz02
+    A01 --> A00 : <u>d02\nz02,A1(e02)
+    A01 --> A02 : <u>e01 & y1=1\nA1(e12)
+    A01 --> A03 : <u>A1(e11) & y1=2\nz02
+    A02 --> A04 : <u>e05 & y2=0 & x01 & x02\nz04
+    A02 --> A04 : <u>e05 & y2=0 & !x01 & y3=1\n~
+    A02 --> A00 : <u>e05 & y2=0 & !x01 & y3!=1\n~
+    A03 --> A00 : <u>e03 & y1!=2\nz05,z28,z15
+    A03 --> A00 : <u>d02 & y1=2\nA1(e02)
+    A04 --> A04 : <u>e06 & x01 & x02\nz04,z28,z15
+    A04 --> A03 : <u>e06 & x01 & !x02\nz28,z15,A3(e33)
+    A04 --> A00 : <u>e06 & !x01\nz28,z15,A3(e33)
+}
+@enduml

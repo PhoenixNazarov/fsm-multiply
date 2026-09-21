@@ -30,3 +30,9 @@ bin/
 
 .idea
 
+### LaTeX build artifacts (articles/) ###
+articles/**/*.aux
+articles/**/*.log
+articles/**/*.out
+articles/**/puml/*.png
+
