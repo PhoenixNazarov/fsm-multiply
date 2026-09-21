@@ -108,19 +108,50 @@ data class Automaton(
         return events
     }
 
-    fun toUML(): String {
+    fun toUML(others: List<Automaton> = listOf()): String {
+        val othersById = others.flatMap { sib -> sib.id.map { id -> id to sib } }.toMap()
+
         var res = "state \"«$name» ($idStr)\" as $idStr {\n"
         res += "    [*] --> $idStr${startState.id}\n"
 
         states.forEach {
-            var nestedFsm = ""
-            if (it.nestedFsmIds.isNotEmpty()) {
-                nestedFsm = "${it.nestedFsmIds.joinToString(",")}\\n"
-            }
-            res += "    state \"${it.name}\" as ${idStr}${it.id} : $nestedFsm ${
-                formatEvents(it.enterEventsId)
-            }\n"
+            val events = formatEvents(it.enterEventsId)
+            val label = if (events.isEmpty()) "" else "<size:14>$events"
+            res += "    state \"${it.name}\" as ${idStr}${it.id} : $label\n"
         }
+
+        // Nested automata get their own sub-state box, one inner state per
+        // nested automaton, listing only the events it reacts to purely by
+        // being nested here (its own automation-event inputs addressed to
+        // this automaton) - as opposed to events this state already
+        // explicitly relays to it (shown above via the normal "Id(event)"
+        // call annotation, so not repeated here).
+        var nestedCounter = 0
+        states.forEach { state ->
+            if (state.nestedFsmIds.isEmpty()) return@forEach
+            val relayedToNested = getEvents(state.enterEventsId)
+                .filterIsInstance<AutomationEventInput>()
+                .filter { it.automationId in state.nestedFsmIds }
+                .map { it.id }
+                .toSet()
+            res += "    state \"${state.name}\" as ${idStr}${state.id} {\n"
+            state.nestedFsmIds.forEach nestedLoop@{ nestedId ->
+                val sibling = othersById[nestedId] ?: return@nestedLoop
+                val siblingInputIds = sibling.ownInputIds()
+                val events = sibling.events
+                    .filterIsInstance<AutomationEventInput>()
+                    .filter {
+                        it.automationId in this.id && it.id in siblingInputIds && it.id !in relayedToNested
+                    }
+                    .map { it.id }
+                nestedCounter++
+                res += "        state \"<size:12>$nestedId\" as F$nestedCounter : <size:12><i>${
+                    events.joinToString(", ")
+                }\n"
+            }
+            res += "    }\n"
+        }
+
         transitions.forEach {
             res += "    ${idStr}${getState(it.fromStateId).id} --> ${idStr}${getState(it.toStateId).id} : <u>${
                 formatEvents(listOf(it.eventId))
