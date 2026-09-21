@@ -123,21 +123,26 @@ data class Automaton(
         // Nested automata get their own sub-state box, one inner state per
         // nested automaton, listing only the events it reacts to purely by
         // being nested here (its own automation-event inputs addressed to
-        // this automaton) - as opposed to events this state already
-        // explicitly relays to it (shown above via the normal "Id(event)"
-        // call annotation, so not repeated here).
+        // this automaton) - as opposed to events this automaton explicitly
+        // relays to it via some transition or state's enterEventsId
+        // ANYWHERE (not just at this particular state - a relay declared on
+        // a different state, e.g. "e33" relayed only when leaving "Выдача
+        // жетона", still means the design intent is relay, not raw nested
+        // reachability, even for a state where that automaton is nested
+        // without ever actually relaying it, e.g. "Игра").
+        val relayedGlobally = getEvents((states.flatMap { it.enterEventsId } + transitions.flatMap { it.enterEventsId }).distinct())
+            .filterIsInstance<AutomationEventInput>()
+            .groupBy({ it.automationId }, { it.id })
+            .mapValues { it.value.toSet() }
+
         var nestedCounter = 0
         states.forEach { state ->
             if (state.nestedFsmIds.isEmpty()) return@forEach
-            val relayedToNested = getEvents(state.enterEventsId)
-                .filterIsInstance<AutomationEventInput>()
-                .filter { it.automationId in state.nestedFsmIds }
-                .map { it.id }
-                .toSet()
             res += "    state \"${state.name}\" as ${idStr}${state.id} {\n"
             state.nestedFsmIds.forEach nestedLoop@{ nestedId ->
                 val sibling = othersById[nestedId] ?: return@nestedLoop
                 val siblingInputIds = sibling.ownInputIds()
+                val relayedToNested = relayedGlobally[nestedId] ?: emptySet()
                 val events = sibling.events
                     .filterIsInstance<AutomationEventInput>()
                     .filter {
