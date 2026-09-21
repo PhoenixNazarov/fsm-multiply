@@ -2,10 +2,10 @@
 skinparam backgroundColor white
 state "Монетоприемник (A1)" as A1 {
     [*] --> A10
-    state "Монетоприемник пуст" as A10 :  
-    state "Монетоприемник закрыт" as A13 :  
-    state "Жетон принят" as A11 :  A0(e11)
-    state "Жетон не распознан" as A12 :  A0(e11)
+    state "Монетоприемник пуст" as A10 : 
+    state "Монетоприемник закрыт" as A13 : 
+    state "Жетон принят" as A11 : <size:14>A0(e11)
+    state "Жетон не распознан" as A12 : <size:14>A0(e11)
     A10 --> A11 : <u>e10 & x11 & y3!=1\nz12,z30,z31
     A10 --> A12 : <u>e10 & !x11 & y3!=1\nz12
     A11 --> A11 : <u>e10 & x11 & y3!=1\nz12,z30,z31

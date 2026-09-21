@@ -2,8 +2,8 @@
 skinparam backgroundColor white
 state "Джекпот-счётчик (A3)" as A3 {
     [*] --> A30
-    state "Накопление" as A30 :  
-    state "Выплата джекпота" as A31 :  
+    state "Накопление" as A30 : 
+    state "Выплата джекпота" as A31 : 
     A30 --> A31 : <u>A0(e05) & y2=3 & x30\nz31
     A30 --> A30 : <u>A0(e05) & y2=3 & !x30\n~
     A31 --> A30 : <u>A0(e33)\nz32,z31

@@ -1,0 +1,8 @@
+@startuml
+skinparam backgroundColor white
+state "Звуки (A4)" as A4 {
+    [*] --> A40
+    state "Ожидание" as A40 : 
+    A40 --> A40 : <u>A0(e06)\nz40
+}
+@enduml
