@@ -3,14 +3,22 @@
 % ---------------------------------------------------------------------------
 % Preamble
 % ---------------------------------------------------------------------------
-\usepackage[T2A]{fontenc}
-\usepackage[utf8]{inputenc}
+% Собирается lualatex'ом (не pdflatex): fontspec + реальный Unicode-шрифт
+% вместо T2A/pdflatex - иначе pdflatex перекодирует кириллицу через
+% виртуальные (lh) PK-шрифты без корректной ToUnicode-таблицы, и текст,
+% скопированный из PDF, превращается в крокозябры (сам PDF при этом
+% выглядит нормально - ломается только copy-paste).
+\usepackage{fontspec}
+\setmainfont{Liberation Serif}
+\setsansfont{Liberation Sans}
+\setmonofont{Liberation Mono}
 \usepackage[russian]{babel}
 \usepackage[margin=2.5cm]{geometry}
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{graphicx}
 \usepackage{xcolor}
+\usepackage{float}
 \usepackage{hyperref}
 
 \hypersetup{
@@ -28,10 +36,12 @@
 % Диаграммы состояний рендерятся напрямую из исходников PlantUML
 % (puml/*.puml - буквальный вывод Automaton.toUML()) во время компиляции.
 % Требуется: команда `plantuml` (и Java) в PATH, и компиляция с флагом
-% -shell-escape (pdflatex -shell-escape article.tex), иначе \write18 ниже
-% откажет молча и .png не появятся.
+% -shell-escape (lualatex -shell-escape article.tex), иначе рендер ниже
+% откажет молча и .png не появятся. Под lualatex `\write18` не запускает
+% системную команду (в отличие от pdflatex) - нужен `os.execute` через
+% `\directlua`.
 \begin{document}
-\immediate\write18{plantuml -tpng puml/a0.puml puml/a1.puml puml/a2.puml puml/a3.puml puml/a4.puml puml/final.puml}
+\directlua{os.execute("plantuml -tpng puml/a0.puml puml/a1.puml puml/a2.puml puml/a3.puml puml/a4.puml puml/final.puml")}
 \maketitle
 
 \noindent
@@ -114,7 +124,7 @@
     иначе: native(S)[B] = k ?
 \end{verbatim}
 
-Полный код: \url{https://github.com/PhoenixNazarov/fsm-multiply}
+Полный код: \href{https://github.com/PhoenixNazarov/fsm-multiply}{\texttt{github.com/PhoenixNazarov/fsm-multiply}}
 (\texttt{Main.kt}, \texttt{Multiplier.kt}).
 
 \section{Дополненная система конечных автоматов}
@@ -130,9 +140,9 @@
 
 \subsection*{Автомат 1. «Игровая машина» ($A_0$)}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{puml/a0.png}
+\includegraphics[width=\textwidth]{puml/a0.png}
 \caption{Диаграмма состояний автомата $A_0$ (PlantUML, из \texttt{puml/a0.puml}).}
 \end{figure}
 
@@ -141,19 +151,20 @@
 \clearpage
 \subsection*{Автомат 2. «Монетоприемник» ($A_1$)}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.75\textwidth]{puml/a1.png}
+\includegraphics[width=\textwidth]{puml/a1.png}
 \caption{Диаграмма состояний автомата $A_1$ (PlantUML, из \texttt{puml/a1.puml}).}
 \end{figure}
 
 \input{table_a1.tex}
 
+\clearpage
 \subsection*{Автомат 3. «Игровые барабаны» ($A_2$)}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.6\textwidth]{puml/a2.png}
+\includegraphics[width=12cm]{puml/a2.png}
 \caption{Диаграмма состояний автомата $A_2$ (PlantUML, из \texttt{puml/a2.puml}).}
 \end{figure}
 
@@ -162,9 +173,9 @@
 \clearpage
 \subsection*{Автомат 4. «Джекпот-счетчик» ($A_3$)}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.4\textwidth]{puml/a3.png}
+\includegraphics[width=11cm]{puml/a3.png}
 \caption{Диаграмма состояний автомата $A_3$ (PlantUML, из \texttt{puml/a3.puml})
   --- нового вложенного автомата.}
 \end{figure}
@@ -176,11 +187,12 @@
 состоянию второго вложенного автомата, ради которого дорабатывался
 алгоритм.
 
+\clearpage
 \subsection*{Автомат 5. «Звуки» ($A_4$)}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
-\includegraphics[width=0.3\textwidth]{puml/a4.png}
+\includegraphics[width=6.5cm]{puml/a4.png}
 \caption{Диаграмма состояний автомата $A_4$ (PlantUML, из \texttt{puml/a4.puml})
   --- независимо вложенного автомата.}
 \end{figure}
@@ -200,15 +212,19 @@ $A_4$ вложен не в «Игра», а в другое состояние �
 \clearpage
 \section{Итоговый перемноженный автомат}
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{puml/final.png}
 \caption{Диаграмма состояний итогового автомата
   $A_0\times A_1\times A_2\times A_3\times A_4$ (PlantUML, из
   \texttt{puml/final.puml}; 9 состояний). Каждое составное состояние
-  подписано именем состояния $A_0$ (ведущего автомата) --- полное
-  соответствие номера состояния всем пяти исходным состояниям приведено
-  в примечании ниже.}
+  подписано именем одного из пяти исходных состояний, из которых оно
+  собрано --- как правило, состояния $A_0$; там, где имя $A_0$ повторяется
+  у нескольких состояний (например, три состояния «Игра» или два
+  «Выдача жетона»), вместо него взято имя того автомата, чьи состояния
+  различают эту группу (барабаны $A_2$, счётчик джекпота $A_3$ и т.\,д.).
+  Полное соответствие номера состояния всем пяти исходным состояниям
+  приведено в примечании ниже.}
 \end{figure}
 
 \footnotesize
