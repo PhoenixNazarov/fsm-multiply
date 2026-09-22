@@ -1,5 +1,7 @@
 @startuml
-skinparam backgroundColor white
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
 state "Игровые барабаны (A2)" as A2 {
     [*] --> A20
     state "Барабаны остановлены" as A20 : 

@@ -205,8 +205,15 @@ $A_4$ вложен не в «Игра», а в другое состояние �
 \includegraphics[width=\textwidth]{puml/final.png}
 \caption{Диаграмма состояний итогового автомата
   $A_0\times A_1\times A_2\times A_3\times A_4$ (PlantUML, из
-  \texttt{puml/final.puml}; 9 состояний).}
+  \texttt{puml/final.puml}; 9 состояний). Каждое составное состояние
+  подписано именем состояния $A_0$ (ведущего автомата) --- полное
+  соответствие номера состояния всем пяти исходным состояниям приведено
+  в примечании ниже.}
 \end{figure}
+
+\footnotesize
+\input{legend_final.tex}
+\normalsize
 
 \input{table_final.tex}
 

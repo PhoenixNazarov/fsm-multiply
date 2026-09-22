@@ -1,5 +1,7 @@
 @startuml
-skinparam backgroundColor white
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
 state "Игровая машина (A0)" as A0 {
     [*] --> A00
     state "Ожидание" as A00 : <size:14>z03,z13,z12,A1(e14)

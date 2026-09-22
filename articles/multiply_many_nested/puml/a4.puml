@@ -1,5 +1,7 @@
 @startuml
-skinparam backgroundColor white
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
 state "Звуки (A4)" as A4 {
     [*] --> A40
     state "Ожидание" as A40 : 

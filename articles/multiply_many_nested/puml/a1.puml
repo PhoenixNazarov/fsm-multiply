@@ -1,5 +1,7 @@
 @startuml
-skinparam backgroundColor white
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
 state "Монетоприемник (A1)" as A1 {
     [*] --> A10
     state "Монетоприемник пуст" as A10 : 

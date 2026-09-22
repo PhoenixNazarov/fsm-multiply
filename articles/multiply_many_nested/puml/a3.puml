@@ -1,5 +1,7 @@
 @startuml
-skinparam backgroundColor white
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
 state "Джекпот-счётчик (A3)" as A3 {
     [*] --> A30
     state "Накопление" as A30 : 
