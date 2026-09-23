@@ -4,15 +4,15 @@ skinparam stateFontSize 20
 skinparam arrowFontSize 14
 state "Игровая машина x Монетоприемник x Игровые барабаны x Джекпот-счётчик x Звуки (A0A1A2A3A4)" as A0A1A2A3A4 {
     [*] --> A0A1A2A3A421
-    state "Ожидание (S21)" as A0A1A2A3A421 : <size:14>z03,z13,z12
-    state "Прием жетонов (S5)" as A0A1A2A3A45 : 
-    state "Жетон не распознан (S6)" as A0A1A2A3A46 : 
-    state "Барабаны запущены (S9)" as A0A1A2A3A49 : 
-    state "Первый барабан остановлен (S8)" as A0A1A2A3A48 : 
-    state "Второй барабан остановлен (S10)" as A0A1A2A3A410 : 
-    state "Выплата джекпота (S15)" as A0A1A2A3A415 : 
-    state "Выдача жетона (S18)" as A0A1A2A3A418 : 
-    state "Монетоприемник закрыт (S19)" as A0A1A2A3A419 : 
+    state "Ожидание (S1)" as A0A1A2A3A421 : <size:14>z03,z13,z12
+    state "Прием жетонов (S2)" as A0A1A2A3A45 : 
+    state "Жетон не распознан (S3)" as A0A1A2A3A46 : 
+    state "Барабаны запущены (S4)" as A0A1A2A3A49 : 
+    state "Первый барабан остановлен (S5)" as A0A1A2A3A48 : 
+    state "Второй барабан остановлен (S6)" as A0A1A2A3A410 : 
+    state "Выплата джекпота (S7)" as A0A1A2A3A415 : 
+    state "Выдача жетона (S8)" as A0A1A2A3A418 : 
+    state "Монетоприемник закрыт (S9)" as A0A1A2A3A419 : 
     A0A1A2A3A421 --> A0A1A2A3A45 : <u>e10 & x11\nz12,z30,z31
     A0A1A2A3A421 --> A0A1A2A3A46 : <u>e10 & !x11\nz12,z02
     A0A1A2A3A45 --> A0A1A2A3A421 : <u>e02\nz02,z14

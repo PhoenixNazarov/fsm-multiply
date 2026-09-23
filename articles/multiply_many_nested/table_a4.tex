@@ -1,13 +1,24 @@
-\begin{table}[h]
+\begin{table}[H]
 \centering
-\caption{Входные и выходные события автомата «Звуки» (A4)}
+\caption{Входные события автомата «Звуки» (A4)}
 \small
-\begin{tabular}{@{}p{1.3cm}p{4.6cm}l|lp{4.6cm}p{1.3cm}@{}}
+\begin{tabular}{@{}lll@{}}
 \toprule
-\multicolumn{3}{c}{Входы} & \multicolumn{3}{c}{Выходы} \\
-Группа & Описание & id & id & Описание & Группа \\
+Группа & id & Описание \\
 \midrule
-\multirow{1}{*}{A0} & Выдан жетон из банка & \texttt{e06} & \texttt{z40} & Проиграть звук выдачи жетона & \multirow{1}{*}{Среда} \\
+\multirow{1}{*}{A0} & \texttt{e06} & Выдан жетон из банка \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\caption{Выходные события автомата «Звуки» (A4)}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Группа & id & Описание \\
+\midrule
+\multirow{1}{*}{Среда} & \texttt{z40} & Проиграть звук выдачи жетона \\
 \bottomrule
 \end{tabular}
 \end{table}

@@ -381,9 +381,13 @@ data class Automaton(
     // \cline проводится только там, где ОБЕ стороны действительно
     // заканчивают свою группу на этой строке (иначе разделительная линия
     // резала бы середину ещё не закрытой группы напротив).
+    // Входы и выходы печатаются как две отдельные таблицы, а не как одна
+    // таблица "входы слева / выходы справа": у входов и выходов почти всегда
+    // разное количество строк, и общая таблица с рядами до max(вход,выход)
+    // оставляла бы у более короткой стороны пустые ячейки на каждой лишней
+    // строке.
     fun toPinsLatex(others: List<Automaton> = listOf()): String {
         val (inputs, outputs) = pinRows(others)
-        val rows = maxOf(inputs.size, outputs.size, 1)
 
         fun rowSpans(items: List<Triple<String, String, String>>): List<Int> {
             val spans = MutableList(items.size) { 0 }
@@ -404,48 +408,33 @@ data class Automaton(
 
         fun code(s: String) = "\\texttt{${esc(s)}}"
 
-        val inSpans = rowSpans(inputs)
-        val outSpans = rowSpans(outputs)
-
-        val lines = mutableListOf<String>()
-        for (i in 0 until rows) {
-            val left = if (i < inputs.size) {
-                val (group, id, desc) = inputs[i]
-                val g = if (inSpans[i] > 0) "\\multirow{${inSpans[i]}}{*}{${esc(group)}}" else ""
-                listOf(g, esc(desc), code(id))
-            } else listOf("", "", "")
-            val right = if (i < outputs.size) {
-                val (group, id, desc) = outputs[i]
-                val g = if (outSpans[i] > 0) "\\multirow{${outSpans[i]}}{*}{${esc(group)}}" else ""
-                listOf(code(id), esc(desc), g)
-            } else listOf("", "", "")
-            lines += (left + right).joinToString(" & ") + " \\\\"
-
-            if (i == rows - 1) continue
-            val leftCloses = i + 1 >= inputs.size || inSpans[i + 1] > 0
-            val rightCloses = i + 1 >= outputs.size || outSpans[i + 1] > 0
-            when {
-                leftCloses && rightCloses -> lines += "\\cline{1-3}\\cline{4-6}"
-                leftCloses -> lines += "\\cline{1-3}"
-                rightCloses -> lines += "\\cline{4-6}"
+        fun table(caption: String, items: List<Triple<String, String, String>>): String {
+            val spans = rowSpans(items)
+            val lines = mutableListOf<String>()
+            for (i in items.indices) {
+                val (group, id, desc) = items[i]
+                val g = if (spans[i] > 0) "\\multirow{${spans[i]}}{*}{${esc(group)}}" else ""
+                lines += "$g & ${code(id)} & ${esc(desc)} \\\\"
+                if (i != items.size - 1 && spans[i + 1] > 0) lines += "\\cline{1-3}"
             }
+            return """
+                |\begin{table}[H]
+                |\centering
+                |\caption{$caption}
+                |\small
+                |\begin{tabular}{@{}lll@{}}
+                |\toprule
+                |Группа & id & Описание \\
+                |\midrule
+                |${lines.joinToString("\n")}
+                |\bottomrule
+                |\end{tabular}
+                |\end{table}
+            """.trimMargin()
         }
 
-        return """
-            |\begin{table}[h]
-            |\centering
-            |\caption{Входные и выходные события автомата «$name» ($idStr)}
-            |\small
-            |\begin{tabular}{@{}p{1.3cm}p{4.6cm}l|lp{4.6cm}p{1.3cm}@{}}
-            |\toprule
-            |\multicolumn{3}{c}{Входы} & \multicolumn{3}{c}{Выходы} \\
-            |Группа & Описание & id & id & Описание & Группа \\
-            |\midrule
-            |${lines.joinToString("\n")}
-            |\bottomrule
-            |\end{tabular}
-            |\end{table}
-        """.trimMargin()
+        return table("Входные события автомата «$name» ($idStr)", inputs) + "\n" +
+            table("Выходные события автомата «$name» ($idStr)", outputs)
     }
 }
 
