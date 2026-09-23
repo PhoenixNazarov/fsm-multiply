@@ -422,8 +422,15 @@ data class Automaton(
             lines += (left + right).joinToString(" & ") + " \\\\"
 
             if (i == rows - 1) continue
-            val leftCloses = i + 1 >= inputs.size || inSpans[i + 1] > 0
-            val rightCloses = i + 1 >= outputs.size || outSpans[i + 1] > 0
+            // Draw a closing line under a side only where it actually still has
+            // content: either a real group boundary within its own rows, or its
+            // very last row (a one-time bottom border for the shorter side).
+            // Without the `i < inputs.size` (`outputs.size`) guard, "i + 1 >=
+            // inputs.size" stays true for every row after the shorter side runs
+            // out, drawing a stray line under each trailing blank row instead of
+            // just once.
+            val leftCloses = i < inputs.size && (i == inputs.size - 1 || inSpans[i + 1] > 0)
+            val rightCloses = i < outputs.size && (i == outputs.size - 1 || outSpans[i + 1] > 0)
             when {
                 leftCloses && rightCloses -> lines += "\\cline{1-3}\\cline{4-6}"
                 leftCloses -> lines += "\\cline{1-3}"
