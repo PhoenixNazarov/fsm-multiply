@@ -7,7 +7,11 @@
 \multicolumn{3}{c}{Входы} & \multicolumn{3}{c}{Выходы} \\
 Группа & Описание & id & id & Описание & Группа \\
 \midrule
-\multirow{1}{*}{A0} & Выдан жетон из банка & \texttt{e06} & \texttt{z40} & Проиграть звук выдачи жетона & \multirow{1}{*}{Среда} \\
+\multirow{1}{*}{A0} & Нажата кнопка <<Игра>> & \texttt{e01} & \texttt{e01} & Нажата кнопка <<Игра>> & \multirow{2}{*}{A41} \\
+\cline{1-3}
+ &  &  & \texttt{e06} & Выдан жетон из банка &  \\
+\cline{4-6}
+ &  &  & \texttt{z41} & Проиграть звук начала вращения барабанов & \multirow{1}{*}{Среда} \\
 \bottomrule
 \end{tabular}
 \end{table}

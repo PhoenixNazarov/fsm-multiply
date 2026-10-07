@@ -5,6 +5,9 @@ skinparam arrowFontSize 14
 state "Звуки (A4)" as A4 {
     [*] --> A40
     state "Ожидание" as A40 : 
-    A40 --> A40 : <u>A0(e06)\nz40
+    state "Ожидание" as A40 {
+        state "<size:12>A41" as F1 : <size:12><i>e01, e06
+    }
+    A40 --> A40 : <u>A0(e01)\nz41
 }
 @enduml

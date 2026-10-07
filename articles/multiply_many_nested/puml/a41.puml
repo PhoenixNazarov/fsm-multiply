@@ -1,0 +1,14 @@
+@startuml
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
+state "Регулятор громкости (A41)" as A41 {
+    [*] --> A410
+    state "Обычная громкость" as A410 : 
+    state "Приглушено" as A411 : 
+    A410 --> A411 : <u>A4(e01)\n~
+    A411 --> A410 : <u>A4(e01)\n~
+    A410 --> A410 : <u>A4(e06)\nz40
+    A411 --> A411 : <u>A4(e06)\n~
+}
+@enduml

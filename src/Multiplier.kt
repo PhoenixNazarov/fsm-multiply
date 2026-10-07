@@ -1,3 +1,26 @@
+// `owner.state.nestedFsmIds` lists what owner's OWN current native state declares
+// nested inside it (e.g. A4.state0 declares A41). That declaration should only
+// count for the freshly-built composite state if `owner` is itself genuinely
+// reachable there. Most pairs have no such relationship at all (owner is never
+// mentioned as a nested child in ANY of companion's states) - for those, the
+// declaration is unconditional, same as before. But when `companion`'s automaton
+// DOES sometimes nest `owner` (checked across companion's full state list, not
+// just its current one), owner's own nested-children declaration must only be
+// carried forward while companion's CURRENT state actually lists owner as
+// nested right now - otherwise, once owner is folded into the product, its
+// declaration would leak into every composite state forever (the depth-2 "e06
+// while A0=Ожидание still plays z40" bug: A4 nests A41 unconditionally, so
+// folding A4 in used to make A41 reachable from every A0 state, not just the
+// ones where A0 actually lists A4 as nested).
+private fun nestedFsmContribution(owner: CalculateAutomaton, companion: CalculateAutomaton): List<String> {
+    val ownIds = owner.state.nestedFsmIds
+    if (ownIds.isEmpty()) return ownIds
+    val everConditionallyNestedByCompanion =
+        companion.automaton.states.any { st -> st.nestedFsmIds.any { it in owner.automaton.id } }
+    if (!everConditionallyNestedByCompanion) return ownIds
+    return if (owner.automaton.id.any { it in companion.state.nestedFsmIds }) ownIds else listOf()
+}
+
 class Multiplier(
     private val automaton1: Automaton,
     private val automaton2: Automaton,
@@ -197,7 +220,10 @@ class Multiplier(
                 id = id++,
                 referenceId = listOf(),
                 enterEventsId = it.state.enterEvents.map { it2 -> it2.id },
-                nestedFsmIds = (it.state.first.state.nestedFsmIds + it.state.second.state.nestedFsmIds).distinct()
+                nestedFsmIds = (
+                        nestedFsmContribution(it.state.first, it.state.second) +
+                                nestedFsmContribution(it.state.second, it.state.first)
+                        ).distinct()
                     .filter { it2 ->
                         it2 !in it.state.first.automaton.id + it.state.second.automaton.id
                     },
