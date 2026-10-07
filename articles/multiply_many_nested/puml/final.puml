@@ -2,81 +2,49 @@
 !theme mars
 skinparam stateFontSize 20
 skinparam arrowFontSize 14
-state "Игровая машина x Монетоприемник x Игровые барабаны x Джекпот-счётчик x Звуки x Регулятор громкости (A0A1A2A3A4A41)" as A0A1A2A3A4A41 {
-    [*] --> A0A1A2A3A4A4140
-    state "Ожидание (S1)" as A0A1A2A3A4A4140 : <size:14>z03,z13,z12
-    state "Прием жетонов (S2)" as A0A1A2A3A4A415 : 
-    state "Ошибка (S3)" as A0A1A2A3A4A416 : 
-    state "Игра (S4)" as A0A1A2A3A4A4115 : 
-    state "Игра (S5)" as A0A1A2A3A4A4124 : 
-    state "Игра (S6)" as A0A1A2A3A4A4153 : 
-    state "Игра (S7)" as A0A1A2A3A4A4138 : 
-    state "Игра (S8)" as A0A1A2A3A4A4125 : 
-    state "Выдача жетона (S9)" as A0A1A2A3A4A4144 : 
-    state "Выдача жетона (S10)" as A0A1A2A3A4A4148 : 
-    state "Игра (S11)" as A0A1A2A3A4A4139 : 
-    state "Ошибка (S12)" as A0A1A2A3A4A4131 : 
-    state "Выдача жетона (S13)" as A0A1A2A3A4A4141 : 
-    state "Выдача жетона (S14)" as A0A1A2A3A4A4145 : 
-    state "Приглушено (S15)" as A0A1A2A3A4A4156 : <size:14>z03,z13,z12
-    state "Ошибка (S16)" as A0A1A2A3A4A4146 : 
-    state "Приглушено (S17)" as A0A1A2A3A4A4154 : 
-    state "Ошибка (S18)" as A0A1A2A3A4A4155 : 
-    A0A1A2A3A4A4140 --> A0A1A2A3A4A415 : <u>e10 & x11\nz12,z30,z31
-    A0A1A2A3A4A4140 --> A0A1A2A3A4A416 : <u>e10 & !x11\nz12,z02
-    A0A1A2A3A4A415 --> A0A1A2A3A4A4140 : <u>e02\nz02,z14
-    A0A1A2A3A4A415 --> A0A1A2A3A4A4115 : <u>e01\nz02,z16,z15,z20
-    A0A1A2A3A4A415 --> A0A1A2A3A4A415 : <u>e10 & x11\nz12,z30,z31
-    A0A1A2A3A4A415 --> A0A1A2A3A4A416 : <u>e10 & !x11\nz12,z02
-    A0A1A2A3A4A416 --> A0A1A2A3A4A4140 : <u>e02\nz14
-    A0A1A2A3A4A4115 --> A0A1A2A3A4A4124 : <u>e22\nz23
-    A0A1A2A3A4A4115 --> A0A1A2A3A4A4153 : <u>e01\nz41,z21
-    A0A1A2A3A4A4115 --> A0A1A2A3A4A4115 : <u>e06\nz40
-    A0A1A2A3A4A4124 --> A0A1A2A3A4A4138 : <u>e23\nz25
-    A0A1A2A3A4A4124 --> A0A1A2A3A4A4125 : <u>e01\nz41
-    A0A1A2A3A4A4124 --> A0A1A2A3A4A4124 : <u>e06\nz40
-    A0A1A2A3A4A4153 --> A0A1A2A3A4A4125 : <u>e22\nz23
-    A0A1A2A3A4A4153 --> A0A1A2A3A4A4115 : <u>e01\nz41,z21
-    A0A1A2A3A4A4153 --> A0A1A2A3A4A4153 : <u>e06\n~
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4144 : <u>e05 & x30 & x01 & x02\nz31,z27,z28,z04
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4144 : <u>e05 & x30 & !x01\nz31,z27,z28
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4148 : <u>e05 & !x30 & x01 & x02\nz27,z28,z04
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4140 : <u>e05 & !x30 & !x01\nz27,z28
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4139 : <u>e01\nz41
-    A0A1A2A3A4A4138 --> A0A1A2A3A4A4138 : <u>e06\nz40
-    A0A1A2A3A4A4125 --> A0A1A2A3A4A4139 : <u>e23\nz25
-    A0A1A2A3A4A4125 --> A0A1A2A3A4A4124 : <u>e01\nz41
-    A0A1A2A3A4A4125 --> A0A1A2A3A4A4125 : <u>e06\n~
-    A0A1A2A3A4A4144 --> A0A1A2A3A4A4144 : <u>e06 & x01 & x02\nz40,z04,z28,z15
-    A0A1A2A3A4A4144 --> A0A1A2A3A4A4131 : <u>e06 & x01 & !x02\nz40,z28,z15,z32,z31
-    A0A1A2A3A4A4144 --> A0A1A2A3A4A4140 : <u>e06 & !x01\nz40,z28,z15,z32,z31
-    A0A1A2A3A4A4144 --> A0A1A2A3A4A4141 : <u>e01\nz41
-    A0A1A2A3A4A4148 --> A0A1A2A3A4A4148 : <u>e06 & x01 & x02\nz40,z04,z28,z15
-    A0A1A2A3A4A4148 --> A0A1A2A3A4A4131 : <u>e06 & x01 & !x02\nz40,z28,z15
-    A0A1A2A3A4A4148 --> A0A1A2A3A4A4140 : <u>e06 & !x01\nz40,z28,z15
-    A0A1A2A3A4A4148 --> A0A1A2A3A4A4145 : <u>e01\nz41
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4141 : <u>e05 & x30 & x01 & x02\nz31,z27,z28,z04
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4141 : <u>e05 & x30 & !x01\nz31,z27,z28
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4145 : <u>e05 & !x30 & x01 & x02\nz27,z28,z04
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4156 : <u>e05 & !x30 & !x01\nz27,z28
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4138 : <u>e01\nz41
-    A0A1A2A3A4A4139 --> A0A1A2A3A4A4139 : <u>e06\n~
-    A0A1A2A3A4A4131 --> A0A1A2A3A4A4140 : <u>e03\nz05,z28,z15
-    A0A1A2A3A4A4141 --> A0A1A2A3A4A4141 : <u>e06 & x01 & x02\nz04,z28,z15
-    A0A1A2A3A4A4141 --> A0A1A2A3A4A4146 : <u>e06 & x01 & !x02\nz28,z15,z32,z31
-    A0A1A2A3A4A4141 --> A0A1A2A3A4A4156 : <u>e06 & !x01\nz28,z15,z32,z31
-    A0A1A2A3A4A4141 --> A0A1A2A3A4A4144 : <u>e01\nz41
-    A0A1A2A3A4A4145 --> A0A1A2A3A4A4145 : <u>e06 & x01 & x02\nz04,z28,z15
-    A0A1A2A3A4A4145 --> A0A1A2A3A4A4146 : <u>e06 & x01 & !x02\nz28,z15
-    A0A1A2A3A4A4145 --> A0A1A2A3A4A4156 : <u>e06 & !x01\nz28,z15
-    A0A1A2A3A4A4145 --> A0A1A2A3A4A4148 : <u>e01\nz41
-    A0A1A2A3A4A4156 --> A0A1A2A3A4A4154 : <u>e10 & x11\nz12,z30,z31
-    A0A1A2A3A4A4156 --> A0A1A2A3A4A4155 : <u>e10 & !x11\nz12,z02
-    A0A1A2A3A4A4146 --> A0A1A2A3A4A4156 : <u>e03\nz05,z28,z15
-    A0A1A2A3A4A4154 --> A0A1A2A3A4A4156 : <u>e02\nz02,z14
-    A0A1A2A3A4A4154 --> A0A1A2A3A4A4153 : <u>e01\nz02,z16,z15,z20
-    A0A1A2A3A4A4154 --> A0A1A2A3A4A4154 : <u>e10 & x11\nz12,z30,z31
-    A0A1A2A3A4A4154 --> A0A1A2A3A4A4155 : <u>e10 & !x11\nz12,z02
-    A0A1A2A3A4A4155 --> A0A1A2A3A4A4156 : <u>e02\nz14
+state "Игровая машина x Монетоприемник x Игровые барабаны x Джекпот-счётчик x Звуки (A0A1A2A3A4)" as A0A1A2A3A4 {
+    [*] --> A0A1A2A3A433
+    state "Ожидание (S1)" as A0A1A2A3A433 : <size:14>z03,z13,z12
+    state "Прием жетонов (S2)" as A0A1A2A3A45 : 
+    state "Жетон не распознан (S3)" as A0A1A2A3A46 : 
+    state "Барабаны запущены (S4)" as A0A1A2A3A411 : 
+    state "Первый барабан остановлен (S5)" as A0A1A2A3A415 : 
+    state "Второй барабан остановлен (S6)" as A0A1A2A3A422 : 
+    state "Выплата джекпота (S7)" as A0A1A2A3A427 : 
+    state "Выдача жетона (S8)" as A0A1A2A3A432 : 
+    state "Монетоприемник закрыт (S9)" as A0A1A2A3A429 : 
+    A0A1A2A3A433 --> A0A1A2A3A45 : <u>e10 & x11\nz12,z30,z31
+    A0A1A2A3A433 --> A0A1A2A3A46 : <u>e10 & !x11\nz12,z02
+    A0A1A2A3A45 --> A0A1A2A3A433 : <u>e02\nz02,z14
+    A0A1A2A3A45 --> A0A1A2A3A411 : <u>e01\nz02,z16,z15,z20
+    A0A1A2A3A45 --> A0A1A2A3A45 : <u>e10 & x11\nz12,z30,z31
+    A0A1A2A3A45 --> A0A1A2A3A46 : <u>e10 & !x11\nz12,z02
+    A0A1A2A3A46 --> A0A1A2A3A433 : <u>e02\nz14
+    A0A1A2A3A411 --> A0A1A2A3A415 : <u>e22\nz23
+    A0A1A2A3A411 --> A0A1A2A3A411 : <u>e01\nz41,z21
+    A0A1A2A3A411 --> A0A1A2A3A411 : <u>e06\nz40
+    A0A1A2A3A411 --> A0A1A2A3A411 : <u>\nz42
+    A0A1A2A3A415 --> A0A1A2A3A422 : <u>e23\nz25
+    A0A1A2A3A415 --> A0A1A2A3A415 : <u>e01\nz41
+    A0A1A2A3A415 --> A0A1A2A3A415 : <u>e06\nz40
+    A0A1A2A3A415 --> A0A1A2A3A415 : <u>\nz42
+    A0A1A2A3A422 --> A0A1A2A3A427 : <u>e05 & x30 & x01 & x02\nz31,z27,z28,z04
+    A0A1A2A3A422 --> A0A1A2A3A427 : <u>e05 & x30 & !x01\nz31,z27,z28
+    A0A1A2A3A422 --> A0A1A2A3A432 : <u>e05 & !x30 & x01 & x02\nz27,z28,z04
+    A0A1A2A3A422 --> A0A1A2A3A433 : <u>e05 & !x30 & !x01\nz27,z28
+    A0A1A2A3A422 --> A0A1A2A3A422 : <u>e01\nz41
+    A0A1A2A3A422 --> A0A1A2A3A422 : <u>e06\nz40
+    A0A1A2A3A422 --> A0A1A2A3A422 : <u>\nz42
+    A0A1A2A3A427 --> A0A1A2A3A427 : <u>e06 & x01 & x02\nz40,z04,z28,z15
+    A0A1A2A3A427 --> A0A1A2A3A427 : <u>e01\nz41
+    A0A1A2A3A427 --> A0A1A2A3A427 : <u>\nz42
+    A0A1A2A3A427 --> A0A1A2A3A429 : <u>e06 & x01 & !x02\nz40,z28,z15,z32,z31,z42
+    A0A1A2A3A427 --> A0A1A2A3A433 : <u>e06 & !x01\nz40,z28,z15,z32,z31,z42
+    A0A1A2A3A432 --> A0A1A2A3A432 : <u>e06 & x01 & x02\nz40,z04,z28,z15
+    A0A1A2A3A432 --> A0A1A2A3A432 : <u>e01\nz41
+    A0A1A2A3A432 --> A0A1A2A3A432 : <u>\nz42
+    A0A1A2A3A432 --> A0A1A2A3A429 : <u>e06 & x01 & !x02\nz40,z28,z15
+    A0A1A2A3A432 --> A0A1A2A3A433 : <u>e06 & !x01\nz40,z28,z15
+    A0A1A2A3A429 --> A0A1A2A3A433 : <u>e03\nz05,z28,z15
 }
 @enduml
