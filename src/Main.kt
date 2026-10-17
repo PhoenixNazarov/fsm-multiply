@@ -96,12 +96,18 @@ data class Automaton(
 
     private val idStr get() = id.joinToString("")
 
-    fun formatEvents(inputIds: List<String>): String {
+    // showSource=true prefixes an AutomationEventInput with its source
+    // automaton ("A0(e05)") - useful for outputs/relays, where naming the
+    // destination clarifies who actually consumes the event. For a
+    // transition's own triggering condition (the input side), the source is
+    // just noise - the diagram already shows this automaton nested inside
+    // that source, so showSource=false there prints the bare event id.
+    fun formatEvents(inputIds: List<String>, showSource: Boolean = true): String {
         val events = getEvents(inputIds).joinToString(
             ","
         ) {
             when (it) {
-                is AutomationEventInput -> "${it.automationId}(${it.id})"
+                is AutomationEventInput -> if (showSource) "${it.automationId}(${it.id})" else it.id
                 else -> it.id
             }
         }
@@ -159,7 +165,7 @@ data class Automaton(
 
         transitions.forEach {
             res += "    ${idStr}${getState(it.fromStateId).id} --> ${idStr}${getState(it.toStateId).id} : <u>${
-                formatEvents(listOf(it.eventId))
+                formatEvents(listOf(it.eventId), showSource = false)
             }${if (it.inputIds.isNotEmpty()) " & " else ""}${
                 it.inputIds.joinToString(
                     " & "

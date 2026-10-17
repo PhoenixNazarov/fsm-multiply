@@ -38,8 +38,8 @@ state "Игровая машина x Монетоприемник x Игровы
     A0A1A2A3A427 --> A0A1A2A3A427 : <u>e06 & x01 & x02\nz40,z04,z28,z15
     A0A1A2A3A427 --> A0A1A2A3A427 : <u>e01\nz41
     A0A1A2A3A427 --> A0A1A2A3A427 : <u>\nz42
-    A0A1A2A3A427 --> A0A1A2A3A429 : <u>e06 & x01 & !x02\nz40,z28,z15,z32,z31,z42
-    A0A1A2A3A427 --> A0A1A2A3A433 : <u>e06 & !x01\nz40,z28,z15,z32,z31,z42
+    A0A1A2A3A427 --> A0A1A2A3A429 : <u>e06 & x01 & !x02\nz40,z28,z15,z32,z31
+    A0A1A2A3A427 --> A0A1A2A3A433 : <u>e06 & !x01\nz40,z28,z15,z32,z31
     A0A1A2A3A432 --> A0A1A2A3A432 : <u>e06 & x01 & x02\nz40,z04,z28,z15
     A0A1A2A3A432 --> A0A1A2A3A432 : <u>e01\nz41
     A0A1A2A3A432 --> A0A1A2A3A432 : <u>\nz42
