@@ -574,11 +574,27 @@ data class CalculateAutomaton(
                 }
             }
             .distinct()
+        // AutomationEventInput is never naively/independently explorable - it is,
+        // by definition, an event this automaton only makes sense reacting to
+        // once genuinely nested under its declared source (checked below, via
+        // nestedTransition). Previously this only excluded it when the source
+        // happened to already be `other` - meaning if the source hadn't been
+        // multiplied in yet (an atomic automaton folded before its own
+        // declared parent), the event was wrongly treated as independently
+        // reachable from anywhere, regardless of nesting. That made
+        // multiplication order-dependent beyond what genuine nesting
+        // requires: a nested automaton had to be multiplied strictly after
+        // its parent, or its own events leaked everywhere. Excluding it
+        // unconditionally removes that constraint - if the source is absent,
+        // the event produces no candidate at all here (nor via
+        // nestedTransition, which also requires nestedFsmIds membership),
+        // so the automaton simply doesn't react yet, exactly like it
+        // shouldn't.
         val transitions = preTransitions
             .filter {
                 when (it) {
                     is EnvironmentEventInput -> true
-                    is AutomationEventInput -> it.automationId !in other.automaton.id
+                    is AutomationEventInput -> false
                     is AutomationStateEventInput -> false
                 }
             }

@@ -25,14 +25,36 @@ class Multiplier(
     private val automaton1: Automaton,
     private val automaton2: Automaton,
 ) {
-    private fun executeSpawn(calculateAutomatonSpawn: CalculateAutomatonSpawn2): List<CalculateAutomatonExecution> {
+    // Nesting is only a meaningful (product-computable) relation when it forms
+    // a DAG: "A nested in B's current state" triggers a role swap that makes B
+    // the handle and recurses to look for what's nested inside B. If A and B
+    // also nest each other (directly, as here, or through a longer cycle),
+    // this swap flips back and forth forever - there is no well-defined
+    // product state for "A contains B and B contains A" at the same time, so
+    // this isn't a case the algorithm should try to resolve. `visitedHandleIds`
+    // tracks which automatons have already played "handle" in this chain of
+    // swaps for the CURRENT event; seeing one again means a cycle, and we fail
+    // with a clear error instead of recursing until the stack overflows.
+    private fun executeSpawn(
+        calculateAutomatonSpawn: CalculateAutomatonSpawn2,
+        visitedHandleIds: Set<String> = emptySet(),
+    ): List<CalculateAutomatonExecution> {
         val calculateAutomatonSpawns = mutableListOf<Pair<CalculateAutomatonSpawn2, List<Transition>>>()
         if (calculateAutomatonSpawn.subCalculateAutomaton.automaton.id.any { it in calculateAutomatonSpawn.handleCalculateAutomaton.state.nestedFsmIds }) {
+            val handleIds = calculateAutomatonSpawn.handleCalculateAutomaton.automaton.id
+            if (handleIds.any { it in visitedHandleIds }) {
+                error(
+                    "Circular nesting detected involving ${handleIds.joinToString(",")}: " +
+                        "an automaton cannot be nested (directly or transitively) inside something " +
+                        "that is itself nested inside it."
+                )
+            }
             val nestedProcess = executeSpawn(
                 calculateAutomatonSpawn.copy(
                     handleCalculateAutomaton = calculateAutomatonSpawn.subCalculateAutomaton,
                     subCalculateAutomaton = calculateAutomatonSpawn.handleCalculateAutomaton,
-                )
+                ),
+                visitedHandleIds + handleIds,
             )
             calculateAutomatonSpawns.addAll(
                 nestedProcess.map {
