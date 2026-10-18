@@ -598,10 +598,36 @@ data class CalculateAutomaton(
                     is AutomationStateEventInput -> false
                 }
             }
+        // Being nested is necessary but not sufficient: nesting only licenses this
+        // automaton to PARTICIPATE in an event that genuinely, independently
+        // arises somewhere else (the way A2 and A3 both sit in on A0's real "e05").
+        // It must not let a purely relay-only label (declared as AutomationEventInput
+        // on every side, never anyone's own EnvironmentEventInput) be explored as a
+        // standalone trigger just because this automaton happens to react to that
+        // literal id and happens to be nested here. Without this check, a transition
+        // like A3's own exit relaying "e40" to a nested A4 would ALSO show up as a
+        // free-floating A4-only self-loop (A4 reacting to "e40" alone, with no
+        // counterpart from A3), because nothing here previously asked "does this
+        // event actually originate anywhere" - it only asked "is this automaton
+        // nested".
+        //
+        // A genuine declaration, not reachability from the current state: an
+        // EnvironmentEventInput is a standing fact about the system ("this stimulus
+        // can occur"), not something tied to any one state, and it is never dropped
+        // from a composite's own event registry once folded in (see the `allEvents`
+        // filter in Multiplier.multiply - only Automation*EventInput entries are
+        // ever excluded). Checking reachability from the current state instead would
+        // wrongly reject a genuine event whenever the real source automaton simply
+        // has no transition of its own declared from that particular state (e.g. a
+        // repeated press that the source ignores but a nested sibling still reacts to).
+        fun genuinelyArisesFrom(other: CalculateAutomaton, eventId: String): Boolean =
+            other.automaton.events.any { it.id == eventId && it is EnvironmentEventInput }
         val nestedTransition = preTransitions
             .filter {
                 when (it) {
-                    is AutomationEventInput -> automaton.id.any { it2 -> it2 in other.state.nestedFsmIds }
+                    is AutomationEventInput ->
+                        automaton.id.any { it2 -> it2 in other.state.nestedFsmIds } &&
+                            genuinelyArisesFrom(other, it.id)
                     else -> false
                 }
             }
