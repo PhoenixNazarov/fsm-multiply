@@ -12,7 +12,7 @@ state "Игровая машина (A0)" as A0 {
     state "Игра" as A02 {
         state "<size:12>A3" as F1 : <size:12><i>e05
         state "<size:12>A4" as F2 : <size:12><i>e01
-        state "<size:12>A2" as F3 : <size:12><i>e0, e01, e05
+        state "<size:12>A2" as F3 : <size:12><i>e01, e05
     }
     state "Выдача жетона" as A04 {
         state "<size:12>A4" as F4 : <size:12><i>e06

@@ -126,19 +126,19 @@ data class Automaton(
             res += "    state \"${it.name}\" as ${idStr}${it.id} : $label\n"
         }
 
-        // Each nested box lists exactly the events the nested automaton gets
-        // from this automaton while it is in THIS state: events relayed to it
-        // on entering the state or on a transition leaving it, plus events it
-        // reacts to purely by being nested, restricted by its own guards on
-        // this automaton's state (A4 nested in both "Игра" and "Выдача жетона"
-        // shows e01 only in the first, e06 only in the second). An event that
-        // is relayed somewhere is never listed as a by-nesting reaction.
-        fun relayedIds(ids: List<String>) = getEvents(ids)
+        // Diagram rule: a nested box lists only the events the nested automaton
+        // receives through nesting semantics while the parent is in THIS state,
+        // restricted by its own guards on the parent's state (A4 nested in both
+        // "Игра" and "Выдача жетона" shows e01 only in the first, e06 only in the
+        // second). Addressed events are never listed in the box - they are
+        // already shown on the parent's transition or state as A(e). A box with
+        // no such events shows a dash.
+        val relayedGlobally = getEvents(
+            (states.flatMap { it.enterEventsId } + transitions.flatMap { it.enterEventsId }).distinct()
+        )
             .filterIsInstance<AutomationEventInput>()
             .groupBy({ it.automationId }, { it.id })
-        val relayedGlobally = relayedIds(
-            (states.flatMap { it.enterEventsId } + transitions.flatMap { it.enterEventsId }).distinct()
-        ).mapValues { it.value.toSet() }
+            .mapValues { it.value.toSet() }
 
         fun guardsAllow(sibling: Automaton, eventId: String, state: State) =
             sibling.transitions.filter { it.eventId == eventId }.any { t ->
@@ -152,26 +152,20 @@ data class Automaton(
         states.forEach { state ->
             if (state.nestedFsmIds.isEmpty()) return@forEach
             res += "    state \"${state.name}\" as ${idStr}${state.id} {\n"
-            val relayedHere = relayedIds(
-                (state.enterEventsId + transitions.filter { it.fromStateId == state.id }
-                    .flatMap { it.enterEventsId }).distinct()
-            )
             state.nestedFsmIds.forEach nestedLoop@{ nestedId ->
                 val sibling = othersById[nestedId] ?: return@nestedLoop
                 val siblingInputIds = sibling.ownInputIds()
                 val relayedToNested = relayedGlobally[nestedId] ?: emptySet()
-                val byNesting = sibling.events
+                val events = sibling.events
                     .filterIsInstance<AutomationEventInput>()
                     .filter {
                         it.automationId in this.id && it.id in siblingInputIds &&
                             it.id !in relayedToNested && guardsAllow(sibling, it.id, state)
                     }
                     .map { it.id }
-                val events = (relayedHere[nestedId].orEmpty() + byNesting).distinct()
+                val label = if (events.isEmpty()) "—" else "<i>${events.joinToString(", ")}"
                 nestedCounter++
-                res += "        state \"<size:12>$nestedId\" as F$nestedCounter : <size:12><i>${
-                    events.joinToString(", ")
-                }\n"
+                res += "        state \"<size:12>$nestedId\" as F$nestedCounter : <size:12>$label\n"
             }
             res += "    }\n"
         }
