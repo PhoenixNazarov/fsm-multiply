@@ -148,17 +148,33 @@ class StateAutomatons(
 
 
         for (event in events) {
-            if (event is AutomationEventInput && event.automationId in automatonById) {
-                executeAutomaton(
-                    automaton = getAutomaton(event.automationId),
-                    eventId = event.id,
-                    outputEvents = outputEvents,
-                    depth = depth + 1,
-                )
+            if (event is AutomationEventInput && event.nestedEventId != null) {
+                val target = automatonById[event.automationId] ?: continue
+                deliverAddressed(target, event.nestedEventId, outputEvents, depth + 1, emptySet())
+            } else if (event is AutomationEventInput && event.automationId in automatonById) {
+                deliverAddressed(getAutomaton(event.automationId), event.id, outputEvents, depth + 1, emptySet())
             } else {
                 outputEvents += event
             }
         }
+    }
+
+    // An addressed event goes to its recipient, then to the automata nested in
+    // the state the recipient was in before its transition.
+    private fun deliverAddressed(
+        automaton: Automaton,
+        eventId: String,
+        outputEvents: MutableList<OutputEvent>,
+        depth: Int,
+        visited: Set<Automaton>,
+    ) {
+        if (automaton in visited) return
+        val stateBefore = currentStateByAutomaton.getValue(automaton)
+        executeAutomaton(automaton, eventId, outputEvents, depth)
+        stateBefore.nestedFsmIds
+            .mapNotNull { automatonById[it] }
+            .distinct()
+            .forEach { deliverAddressed(it, eventId, outputEvents, depth + 1, visited + automaton) }
     }
 
 

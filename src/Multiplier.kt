@@ -25,6 +25,36 @@ class Multiplier(
     private val automaton1: Automaton,
     private val automaton2: Automaton,
 ) {
+    private val pendingEvents = mutableSetOf<AutomationEventInput>()
+    private val pendingTransitions = mutableMapOf<String, Transition>()
+
+    private fun deliveryEvent(event: AutomationEventInput) =
+        if (event.nestedEventId != null) event.copy(id = event.nestedEventId) else event
+
+    // An addressed event delivered to X also reaches the automata nested in the
+    // state X was in before its transition. Those not yet multiplied in get a
+    // pending marker on this transition; when such an automaton joins, the
+    // marker is resolved like an ordinary addressed event, so its reaction ends
+    // up in the same product transition as X's. Automata nested in X that were
+    // multiplied in before X are not handled: a nested automaton must be
+    // multiplied after its parent, otherwise its reaction is silently lost.
+    private fun pendingNestedDeliveries(
+        recipientSide: CalculateAutomaton,
+        delivered: AutomationEventInput,
+    ): List<Transition> {
+        val baseId = delivered.nestedEventId ?: delivered.id
+        val nested = recipientSide.state.nestedByAutomaton[delivered.automationId] ?: return listOf()
+        val present = automaton1.id + automaton2.id
+        return nested.filter { it !in present }.map { nestedId ->
+            val marker = AutomationEventInput("$baseId@$nestedId", null, nestedId, baseId)
+            pendingEvents += marker
+            // One instance per marker, so identical paths stay equal and deduplicate.
+            pendingTransitions.getOrPut(marker.id) {
+                Transition(fromStateId = -1, toStateId = -1, eventId = baseId, enterEventsId = listOf(marker.id))
+            }
+        }
+    }
+
     // Nesting is only a meaningful (product-computable) relation when it forms
     // a DAG: "A nested in B's current state" triggers a role swap that makes B
     // the handle and recurses to look for what's nested inside B. If A and B
@@ -100,11 +130,12 @@ class Multiplier(
                 nextSubSpawns.add(subSpawn)
             }
             for (it in automateTransitionEvents) {
+                val pending = pendingNestedDeliveries(subSpawn.second, it)
                 val nextStates = executeSpawn(
                     CalculateAutomatonSpawn2(
                         handleCalculateAutomaton = subSpawn.second,
                         subCalculateAutomaton = subSpawn.first,
-                        event = it
+                        event = deliveryEvent(it)
                     )
                 )
                 nextSubSpawns.addAll(nextStates.map {
@@ -114,6 +145,7 @@ class Multiplier(
                         stateEvents = subSpawn.stateEvents + it.state.enterEvents
                     ).apply {
                         transitions.addAll(it.transitions)
+                        transitions.addAll(pending)
                     }
                 })
                 break // TODO: MAYBE FIX
@@ -143,11 +175,12 @@ class Multiplier(
                 resultSubSpawns.add(setState)
             }
             for (it in automateStateEvents) {
+                val pending = pendingNestedDeliveries(setState.second, it)
                 val calculateSpawns = executeSpawn(
                     CalculateAutomatonSpawn2(
                         handleCalculateAutomaton = setState.second,
                         subCalculateAutomaton = setState.first,
-                        event = it
+                        event = deliveryEvent(it)
                     )
                 )
                 resultSubSpawns.addAll(calculateSpawns.map {
@@ -157,6 +190,7 @@ class Multiplier(
                         stateEvents = setState.stateEvents + it.state.enterEvents
                     ).apply {
                         transitions.addAll(it.transitions)
+                        transitions.addAll(pending)
                     }
                 })
                 break // TODO: FIX
@@ -251,10 +285,11 @@ class Multiplier(
                     },
                 referencesUUID = it.state.first.state.referencesUUID + it.state.second.state.referencesUUID + it.state.first.state.uuid + it.state.second.state.uuid,
                 nativeStateByAutomaton = it.state.first.state.nativeStateByAutomaton + it.state.second.state.nativeStateByAutomaton,
+                nestedByAutomaton = it.state.first.state.nestedByAutomaton + it.state.second.state.nestedByAutomaton,
             )
         }
 
-        val allEvents = (automaton1.events + automaton2.events).distinct().filter {
+        val allEvents = (automaton1.events + automaton2.events + pendingEvents).distinct().filter {
             when (it) {
                 is EnvironmentEventInput -> true
                 is AutomationEventInput -> !(automaton1.id + automaton2.id).contains(it.automationId)

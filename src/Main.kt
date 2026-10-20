@@ -25,6 +25,10 @@ data class AutomationEventInput(
     override val id: String,
     override val description: String? = null,
     val automationId: String,
+    // Set only on a pending delivery created by the multiplier: event
+    // `nestedEventId`, already delivered to a parent, still has to reach
+    // `automationId`, nested in the parent's state but not yet multiplied in.
+    val nestedEventId: String? = null,
 ) : EventInput(id, description)
 
 data class AutomationStateEventInput(
@@ -55,6 +59,10 @@ data class State(
     // any X that was folded in earlier. This map is what AutomationStateEventInput
     // guards should consult instead: it survives every multiplication step.
     val nativeStateByAutomaton: Map<String, Int> = mapOf(),
+    // Same idea for nesting: each original automaton id -> the automata nested
+    // in that automaton's own native state, so a composite state can still say
+    // what is nested in one particular automaton.
+    val nestedByAutomaton: Map<String, List<String>> = mapOf(),
 )
 
 data class Transition(
@@ -271,13 +279,16 @@ data class Automaton(
         val ownInputs = events.filter { it.id in inputIds }.map { Triple(group(it), it.id, it.description ?: "") }
         val ownOutputs = events.filter { it.id in outputIds }.map { Triple(group(it), it.id, it.description ?: "") }
 
+        // Besides its own outputs, an automaton "outputs" its state to the
+        // siblings whose guards query it. Events a sibling receives from this
+        // automaton through nesting are not outputs: this automaton never sends
+        // them (only events it addresses itself, already in ownOutputs, are).
         val seenOutIds = ownOutputs.map { it.second }.toSet()
         val crossOutputs = others.filter { sibling -> sibling.id.none { it in this.id } }
             .flatMap { sibling ->
                 val siblingInputIds = sibling.ownInputIds()
                 sibling.events.mapNotNull { ev ->
                     val targetId = when (ev) {
-                        is AutomationEventInput -> ev.automationId
                         is AutomationStateEventInput -> ev.automationId
                         else -> null
                     }
@@ -500,6 +511,7 @@ class AutomatonBuilder(
             states += State(
                 name = name, id = id, enterEventsId = enterEventsId, nestedFsmIds = nestedFsmIds,
                 nativeStateByAutomaton = this.id.associateWith { id },
+                nestedByAutomaton = this.id.associateWith { nestedFsmIds },
             )
         }
 

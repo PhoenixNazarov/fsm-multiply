@@ -7,6 +7,6 @@ state "Звуки (A4)" as A4 {
     state "Ожидание" as A40 : 
     A40 --> A40 : <u>e01 & y0=2\nz41
     A40 --> A40 : <u>e06 & y0=4\nz40
-    A40 --> A40 : <u>e40\nz42
+    A40 --> A40 : <u>e33\nz42
 }
 @enduml
