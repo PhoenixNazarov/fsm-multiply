@@ -15,6 +15,16 @@ class StateAutomatons(
     private val currentStateByAutomaton: MutableMap<Automaton, State> =
         automatons.associateWith { it.startState }.toMutableMap()
 
+    // Values of environment conditions (guards like x01) for the next step;
+    // "!x01" is the negation of "x01". A condition without a value holds
+    // in both forms, which keeps the old first-match behaviour.
+    var conditions: Map<String, Boolean> = emptyMap()
+
+    private fun conditionHolds(guardId: String): Boolean {
+        val value = conditions[guardId.removePrefix("!")] ?: return true
+        return if (guardId.startsWith("!")) !value else value
+    }
+
 
     fun currentStates(): Map<String, String> =
         currentStateByAutomaton
@@ -208,7 +218,7 @@ class StateAutomatons(
     ): Boolean {
         return automaton.getEvents(transition.inputIds).all { input ->
             when (input) {
-                is EnvironmentEventInput -> true
+                is EnvironmentEventInput -> conditionHolds(input.id)
 
 
                 is AutomationEventInput ->
@@ -243,11 +253,37 @@ fun checkEquivalence(
     val random = Random(seed)
 
 
+    // Environment conditions: environment inputs used as guards on transitions.
+    // They are not events; each step sets their values, so every branch that
+    // depends on the environment (x01 / !x01 ...) is actually exercised.
+    val conditionNames = systemAutomatons.flatMap { automaton ->
+        automaton.transitions.flatMap { it.inputIds }
+            .filter { id -> automaton.events.find { it.id == id } is EnvironmentEventInput }
+    }.map { it.removePrefix("!") }.distinct().sorted()
+
     val inputEvents =
         (systemAutomatons.flatMap { it.events } + singleAutomaton.events)
             .filterIsInstance<EnvironmentEventInput>()
             .map { it.id }
             .distinct()
+            .filter { it.removePrefix("!") !in conditionNames }
+
+    fun randomConditions() = conditionNames.associateWith { random.nextBoolean() }
+
+    // All value combinations when there are few conditions, otherwise a fixed
+    // random sample, so the exhaustive search stays bounded.
+    val conditionVariants: List<Map<String, Boolean>> =
+        if (conditionNames.size <= 6) {
+            (0 until (1 shl conditionNames.size)).map { mask ->
+                conditionNames.withIndex().associate { (i, name) -> name to (mask shr i and 1 == 1) }
+            }
+        } else {
+            List(32) { randomConditions() }
+        }
+
+    fun stepLabel(eventId: String, conditions: Map<String, Boolean>) =
+        if (conditions.isEmpty()) eventId
+        else eventId + conditions.entries.joinToString(",", "[", "]") { (k, v) -> if (v) k else "!$k" }
 
 
     val system = StateAutomatons(systemAutomatons)
@@ -303,12 +339,14 @@ fun checkEquivalence(
         }
 
 
-        for (eventId in inputEvents) {
+        for (eventId in inputEvents) for (conditions in conditionVariants) {
             val systemBefore = system.snapshot()
             val singleBefore = single.snapshot()
 
 
-            eventsHistory.add(eventId)
+            eventsHistory.add(stepLabel(eventId, conditions))
+            system.conditions = conditions
+            single.conditions = conditions
 
 
             val systemOutput = system.execute(eventId).map { it.id }
@@ -319,7 +357,7 @@ fun checkEquivalence(
                 printMismatch(
                     label = "all combinations depth=$bruteForceDepth",
                     step = eventsHistory.size - 1,
-                    eventId = eventId,
+                    eventId = stepLabel(eventId, conditions),
                     eventsHistory = eventsHistory,
                     systemOutput = systemOutput,
                     singleOutput = singleOutput,
@@ -363,7 +401,10 @@ fun checkEquivalence(
 
         repeat(sequenceLength) { step ->
             val eventId = inputEvents.random(random)
-            eventsHistory.add(eventId)
+            val conditions = randomConditions()
+            eventsHistory.add(stepLabel(eventId, conditions))
+            system.conditions = conditions
+            single.conditions = conditions
 
 
             val systemOutput = system.execute(eventId).map { it.id }
@@ -374,7 +415,7 @@ fun checkEquivalence(
                 printMismatch(
                     label = "random iteration=$iteration",
                     step = step,
-                    eventId = eventId,
+                    eventId = stepLabel(eventId, conditions),
                     eventsHistory = eventsHistory,
                     systemOutput = systemOutput,
                     singleOutput = singleOutput,
