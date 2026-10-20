@@ -126,35 +126,48 @@ data class Automaton(
             res += "    state \"${it.name}\" as ${idStr}${it.id} : $label\n"
         }
 
-        // Nested automata get their own sub-state box, one inner state per
-        // nested automaton, listing only the events it reacts to purely by
-        // being nested here (its own automation-event inputs addressed to
-        // this automaton) - as opposed to events this automaton explicitly
-        // relays to it via some transition or state's enterEventsId
-        // ANYWHERE (not just at this particular state - a relay declared on
-        // a different state, e.g. "e33" relayed only when leaving "Выдача
-        // жетона", still means the design intent is relay, not raw nested
-        // reachability, even for a state where that automaton is nested
-        // without ever actually relaying it, e.g. "Игра").
-        val relayedGlobally = getEvents((states.flatMap { it.enterEventsId } + transitions.flatMap { it.enterEventsId }).distinct())
+        // Each nested box lists exactly the events the nested automaton gets
+        // from this automaton while it is in THIS state: events relayed to it
+        // on entering the state or on a transition leaving it, plus events it
+        // reacts to purely by being nested, restricted by its own guards on
+        // this automaton's state (A4 nested in both "Игра" and "Выдача жетона"
+        // shows e01 only in the first, e06 only in the second). An event that
+        // is relayed somewhere is never listed as a by-nesting reaction.
+        fun relayedIds(ids: List<String>) = getEvents(ids)
             .filterIsInstance<AutomationEventInput>()
             .groupBy({ it.automationId }, { it.id })
-            .mapValues { it.value.toSet() }
+        val relayedGlobally = relayedIds(
+            (states.flatMap { it.enterEventsId } + transitions.flatMap { it.enterEventsId }).distinct()
+        ).mapValues { it.value.toSet() }
+
+        fun guardsAllow(sibling: Automaton, eventId: String, state: State) =
+            sibling.transitions.filter { it.eventId == eventId }.any { t ->
+                t.inputIds.mapNotNull { id -> sibling.events.find { it.id == id } }
+                    .filterIsInstance<AutomationStateEventInput>()
+                    .filter { it.automationId in this.id }
+                    .all { (it.stateId == state.id) == it.eq }
+            }
 
         var nestedCounter = 0
         states.forEach { state ->
             if (state.nestedFsmIds.isEmpty()) return@forEach
             res += "    state \"${state.name}\" as ${idStr}${state.id} {\n"
+            val relayedHere = relayedIds(
+                (state.enterEventsId + transitions.filter { it.fromStateId == state.id }
+                    .flatMap { it.enterEventsId }).distinct()
+            )
             state.nestedFsmIds.forEach nestedLoop@{ nestedId ->
                 val sibling = othersById[nestedId] ?: return@nestedLoop
                 val siblingInputIds = sibling.ownInputIds()
                 val relayedToNested = relayedGlobally[nestedId] ?: emptySet()
-                val events = sibling.events
+                val byNesting = sibling.events
                     .filterIsInstance<AutomationEventInput>()
                     .filter {
-                        it.automationId in this.id && it.id in siblingInputIds && it.id !in relayedToNested
+                        it.automationId in this.id && it.id in siblingInputIds &&
+                            it.id !in relayedToNested && guardsAllow(sibling, it.id, state)
                     }
                     .map { it.id }
+                val events = (relayedHere[nestedId].orEmpty() + byNesting).distinct()
                 nestedCounter++
                 res += "        state \"<size:12>$nestedId\" as F$nestedCounter : <size:12><i>${
                     events.joinToString(", ")
