@@ -65,6 +65,7 @@ class StateAutomatons(
             outputEvents = outputEvents,
             depth = 0,
             visited = emptySet(),
+            delivered = mutableSetOf(),
         )
 
 
@@ -78,13 +79,15 @@ class StateAutomatons(
         outputEvents: MutableList<OutputEvent>,
         depth: Int,
         visited: Set<Automaton>,
+        // An automaton nested in several active places still gets the event once.
+        delivered: MutableSet<Automaton>,
     ) {
         if (depth > maxProcessedEvents) {
             error("Too many nested automaton events. Possible event cycle.")
         }
 
 
-        if (automaton in visited) {
+        if (automaton in visited || !delivered.add(automaton)) {
             return
         }
 
@@ -105,6 +108,7 @@ class StateAutomatons(
                 outputEvents = outputEvents,
                 depth = depth + 1,
                 visited = visited + automaton,
+                delivered = delivered,
             )
         }
 
@@ -160,9 +164,9 @@ class StateAutomatons(
         for (event in events) {
             if (event is AutomationEventInput && event.nestedEventId != null) {
                 val target = automatonById[event.automationId] ?: continue
-                deliverAddressed(target, event.nestedEventId, outputEvents, depth + 1, emptySet())
+                deliverAddressed(target, event.nestedEventId, outputEvents, depth + 1, mutableSetOf())
             } else if (event is AutomationEventInput && event.automationId in automatonById) {
-                deliverAddressed(getAutomaton(event.automationId), event.id, outputEvents, depth + 1, emptySet())
+                deliverAddressed(getAutomaton(event.automationId), event.id, outputEvents, depth + 1, mutableSetOf())
             } else {
                 outputEvents += event
             }
@@ -176,15 +180,15 @@ class StateAutomatons(
         eventId: String,
         outputEvents: MutableList<OutputEvent>,
         depth: Int,
-        visited: Set<Automaton>,
+        delivered: MutableSet<Automaton>,
     ) {
-        if (automaton in visited) return
+        if (!delivered.add(automaton)) return
         val stateBefore = currentStateByAutomaton.getValue(automaton)
         executeAutomaton(automaton, eventId, outputEvents, depth)
         stateBefore.nestedFsmIds
             .mapNotNull { automatonById[it] }
             .distinct()
-            .forEach { deliverAddressed(it, eventId, outputEvents, depth + 1, visited + automaton) }
+            .forEach { deliverAddressed(it, eventId, outputEvents, depth + 1, delivered) }
     }
 
 

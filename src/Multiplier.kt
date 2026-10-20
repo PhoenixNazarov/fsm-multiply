@@ -27,6 +27,54 @@ class Multiplier(
 ) {
     private val pendingEvents = mutableSetOf<AutomationEventInput>()
     private val pendingTransitions = mutableMapOf<String, Transition>()
+    private val guardTransitions = mutableMapOf<String, Transition>()
+    private val syntheticConditions = mutableSetOf<EnvironmentEventInput>()
+
+    // Combinations of environment conditions (x01 / !x01 ...) under which none
+    // of the matched transitions of the handle can fire. "!x" is the negation
+    // of "x". Each combination is returned as a list of literals.
+    private fun uncoveredConditions(
+        handle: CalculateAutomaton,
+        matched: List<CalculateAutomatonSubSpawn>,
+    ): List<List<String>> {
+        val literalSets = matched.map { spawn ->
+            handle.getEvents(spawn.transition.inputIds).filterIsInstance<EnvironmentEventInput>().map { it.id }
+        }
+        if (literalSets.any { it.isEmpty() }) return listOf()
+        val names = literalSets.flatten().map { it.removePrefix("!") }.distinct().sorted()
+        if (names.size > 10) return listOf()
+        return (0 until (1 shl names.size)).mapNotNull { mask ->
+            val value = names.withIndex().associate { (i, name) -> name to (mask shr i and 1 == 1) }
+            fun holds(literal: String) =
+                value.getValue(literal.removePrefix("!")).let { if (literal.startsWith("!")) !it else it }
+            if (literalSets.any { set -> set.all(::holds) }) null
+            else names.map { if (value.getValue(it)) it else "!$it" }
+        }
+    }
+
+    // When the handle's transitions on this event do not cover every
+    // combination of environment conditions, the handle simply does not react
+    // under the remaining ones - but automata nested in it still do. Such a
+    // combination becomes its own product transition: the nested reaction,
+    // guarded by that combination, with the handle staying in its state.
+    private fun uncoveredNestedReactions(
+        pairs: List<Pair<CalculateAutomatonSpawn2, List<Transition>>>,
+    ): List<CalculateAutomatonExecution> = pairs.flatMap { (spawn, nestedTransitions) ->
+        if (nestedTransitions.isEmpty()) return@flatMap listOf()
+        val matched = spawn.makeSubSpawns()
+        if (matched.isEmpty()) return@flatMap listOf()
+        uncoveredConditions(spawn.handleCalculateAutomaton, matched).map { literals ->
+            val declared = (automaton1.events + automaton2.events).map { it.id }.toSet()
+            literals.filter { it !in declared }.forEach { syntheticConditions += EnvironmentEventInput(it) }
+            val guard = guardTransitions.getOrPut(spawn.event.id + literals) {
+                Transition(fromStateId = -1, toStateId = -1, eventId = spawn.event.id, inputIds = literals)
+            }
+            CalculateAutomatonExecution(
+                state = CalculateStateWithEntries(spawn.handleCalculateAutomaton, spawn.subCalculateAutomaton),
+                transitions = nestedTransitions + guard,
+            )
+        }
+    }
 
     private fun deliveryEvent(event: AutomationEventInput) =
         if (event.nestedEventId != null) event.copy(id = event.nestedEventId) else event
@@ -76,7 +124,8 @@ class Multiplier(
                 error(
                     "Circular nesting detected involving ${handleIds.joinToString(",")}: " +
                         "an automaton cannot be nested (directly or transitively) inside something " +
-                        "that is itself nested inside it."
+                        "that is itself nested inside it. This also happens when a nested automaton " +
+                        "is multiplied before its parent - multiply it after the parent."
                 )
             }
             val nestedProcess = executeSpawn(
@@ -201,7 +250,7 @@ class Multiplier(
             CalculateAutomatonExecution(
                 state = CalculateStateWithEntries(it.first, it.second, it.stateEvents), transitions = it.transitions
             )
-        }
+        } + uncoveredNestedReactions(calculateAutomatonSpawns)
     }
 
     fun multiply(): Automaton {
@@ -289,7 +338,7 @@ class Multiplier(
             )
         }
 
-        val allEvents = (automaton1.events + automaton2.events + pendingEvents).distinct().filter {
+        val allEvents = (automaton1.events + automaton2.events + pendingEvents + syntheticConditions).distinct().filter {
             when (it) {
                 is EnvironmentEventInput -> true
                 is AutomationEventInput -> !(automaton1.id + automaton2.id).contains(it.automationId)
