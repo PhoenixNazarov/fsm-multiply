@@ -1,0 +1,12 @@
+@startuml
+!pragma layout smetana
+!theme mars
+skinparam stateFontSize 20
+skinparam arrowFontSize 14
+skinparam dpi 240
+state "Звуки (A4)" as A4 {
+    [*] --> A40
+    state "Ожидание" as A40
+    A40 --> A40 : <u>e01 & y0=2, e06 & y0=4, e33</u>\nz41, z40, z42
+}
+@enduml
