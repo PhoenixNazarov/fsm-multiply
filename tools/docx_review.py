@@ -47,6 +47,8 @@ WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 PIC = "http://schemas.openxmlformats.org/drawingml/2006/picture"
 PKG_REL = "http://schemas.openxmlformats.org/package/2006/relationships"
+W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
+W15 = "http://schemas.microsoft.com/office/word/2012/wordml"
 CT = "http://schemas.openxmlformats.org/package/2006/content-types"
 NS = {"w": W, "r": R, "wp": WP, "a": A, "pic": PIC}
 EMU_PER_CM = 360000
@@ -59,6 +61,49 @@ def q(tag):
 
 def _tokens(text):
     return re.findall(r"\w+|\s+|[^\w\s]", text)
+
+
+def _sentences(text):
+    return [x for x in re.split(r"(?<=[.!?;:])(?=\s)", text) if x]
+
+
+def _diff(old_text, new_text):
+    """Token lists and opcodes for a tracked rewrite. Sentences are matched
+    first: a sentence changed by more than about half is shown as one
+    deletion + one insertion; a lightly edited one is diffed word by word."""
+    old_s, new_s = _sentences(old_text), _sentences(new_text)
+    old_tok, new_tok, ops = [], [], []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old_s, new_s, autojunk=False).get_opcodes():
+        a, b = len(old_tok), len(new_tok)
+        ot = [t for x in old_s[i1:i2] for t in _tokens(x)]
+        nt = [t for x in new_s[j1:j2] for t in _tokens(x)]
+        old_tok += ot
+        new_tok += nt
+        if op == "equal":
+            ops.append(("equal", a, a + len(ot), b, b + len(nt)))
+        elif op == "replace" and i2 - i1 == j2 - j1:
+            for k in range(i2 - i1):
+                o, n = _tokens(old_s[i1 + k]), _tokens(new_s[j1 + k])
+                a2 = a + sum(len(_tokens(x)) for x in old_s[i1:i1 + k])
+                b2 = b + sum(len(_tokens(x)) for x in new_s[j1:j1 + k])
+                ratio = difflib.SequenceMatcher(None, o, n, autojunk=False).ratio()
+                if ratio < 0.6:
+                    ops.append(("replace", a2, a2 + len(o), b2, b2 + len(n)))
+                else:
+                    ops += [(t, a2 + x1, a2 + x2, b2 + y1, b2 + y2) for t, x1, x2, y1, y2 in _merged_opcodes(o, n)]
+        else:
+            ops.append(("replace" if ot and nt else ("delete" if ot else "insert"), a, a + len(ot), b, b + len(nt)))
+    # Join adjacent non-equal operations into one.
+    merged = []
+    for op in ops:
+        if op[1] == op[2] and op[3] == op[4]:
+            continue
+        if merged and merged[-1][0] != "equal" and op[0] != "equal":
+            m = merged[-1]
+            merged[-1] = ("replace", m[1], op[2], m[3], op[4])
+        else:
+            merged.append(op)
+    return old_tok, new_tok, merged
 
 
 def _merged_opcodes(old_tok, new_tok):
@@ -114,7 +159,12 @@ class Doc:
         # after earlier edits in the same round changed a paragraph.
         self._paras = list(self.body.iter(q("w:p")))
         self._orig_text = [self._text(p) for p in self._paras]
-        self._comments = []
+        self._comments = []  # new comments: (id, text, resolved)
+        self._resolve_existing = False
+        cpath = os.path.join(self.dir, "word", "comments.xml")
+        self._ctree = etree.parse(cpath) if os.path.exists(cpath) else None
+        existing = [int(c.get(q("w:id"))) for c in self._ctree.getroot()] if self._ctree is not None else []
+        self._next_cid = max(existing + [-1]) + 1
 
     # ---------- reading ----------
     @staticmethod
@@ -133,6 +183,8 @@ class Doc:
                 print("[%d]%s %s" % (i, img, t))
 
     def para(self, snippet):
+        if isinstance(snippet, etree._Element):
+            return snippet
         hits = [i for i, t in enumerate(self._orig_text) if snippet in t]
         if len(hits) > 1:
             exact = [i for i in hits if self._orig_text[i].strip() == snippet.strip()]
@@ -168,7 +220,8 @@ class Doc:
         return r
 
     def _text_runs(self, p):
-        runs = [r for r in p if r.tag == q("w:r")]
+        # Runs that only carry a comment reference are not text; they stay in place.
+        runs = [r for r in p if r.tag == q("w:r") and r.find(q("w:commentReference")) is None]
         for r in runs:
             for ch in r:
                 if ch.tag not in (q("w:rPr"), q("w:t")):
@@ -193,7 +246,8 @@ class Doc:
         old_text = "".join(c for c, _ in chars)
         if old_text == new_text:
             return
-        old_tok, new_tok = _tokens(old_text), _tokens(new_text)
+        old_tok, new_tok, opcodes = _diff(old_text, new_text)
+        assert "".join(old_tok) == old_text and "".join(new_tok) == new_text
         starts, pos = [], 0
         for tok in old_tok:
             starts.append(pos)
@@ -219,7 +273,7 @@ class Doc:
                     out.append(run)
                 i = j
 
-        for op, i1, i2, j1, j2 in _merged_opcodes(old_tok, new_tok):
+        for op, i1, i2, j1, j2 in opcodes:
             a, b = starts[i1], starts[i2]
             if op == "equal":
                 emit_span(a, b, False)
@@ -249,7 +303,7 @@ class Doc:
     def insert_after(self, snippet, text, like=None):
         """Insert a new paragraph after the one found by `snippet`, formatted like `like`."""
         p = self.para(snippet)
-        tpl = self.para(like or snippet)
+        tpl = self.para(like if like is not None else snippet)
         new = etree.Element(q("w:p"))
         ppr = tpl.find(q("w:pPr"))
         ppr = copy.deepcopy(ppr) if ppr is not None else etree.Element(q("w:pPr"))
@@ -291,12 +345,17 @@ class Doc:
             rpr = etree.SubElement(ppr, q("w:rPr"))
         rpr.insert(0, self._mark("w:del"))
 
-    def comment(self, snippet, text, anchor=None):
+    def comment(self, snippet, text, anchor=None, resolved=False):
         """Attach a comment to a paragraph (or to the first run containing `anchor`)."""
-        p = self.para(snippet)
-        cid = str(len(self._comments))
-        self._comments.append((cid, text))
+        self._comment_on(self.para(snippet), text, anchor, resolved)
+
+    def _comment_on(self, p, text, anchor=None, resolved=False):
+        cid = str(self._next_cid)
+        self._next_cid += 1
+        self._comments.append((cid, text, resolved))
         runs = [el for el in p if el.tag in (q("w:r"), q("w:ins"), q("w:del"))]
+        if not runs:
+            raise ValueError("no runs to anchor a comment")
         first, last = runs[0], runs[-1]
         if anchor:
             for el in runs:
@@ -313,6 +372,50 @@ class Doc:
         first.addprevious(start)
         last.addnext(end)
         end.addnext(ref_run)
+
+    def resolve_existing_comments(self):
+        """Mark every comment already in the document as resolved (kept visible)."""
+        self._resolve_existing = True
+
+    def accept_previous(self, label):
+        """Accept every tracked change already in the document. Each changed
+        paragraph gets a resolved comment with its text before the changes,
+        so the previous round stays visible as history."""
+        for p in list(self.body.iter(q("w:p"))):
+            if p.find(".//" + q("w:ins")) is None and p.find(".//" + q("w:del")) is None:
+                continue
+            mark = p.find(q("w:pPr") + "/" + q("w:rPr"))
+            if mark is not None and mark.find(q("w:del")) is not None:
+                raise ValueError("accepting a deleted paragraph mark is not implemented")
+            new_para = mark is not None and mark.find(q("w:ins")) is not None
+            old_text = "".join(el.text or "" for el in p.iter(q("w:t"), q("w:delText"))
+                               if el.tag == q("w:delText") or not any(a.tag == q("w:ins") for a in el.iterancestors()))
+            img_del = any(d.find(".//" + q("w:drawing")) is not None for d in p.iter(q("w:del")))
+            img_ins = any(i.find(".//" + q("w:drawing")) is not None for i in p.iter(q("w:ins")))
+            for d in list(p.iter(q("w:del"))):
+                if d.getparent().tag != q("w:rPr"):
+                    d.getparent().remove(d)
+            for i in list(p.iter(q("w:ins"))):
+                parent = i.getparent()
+                if parent.tag == q("w:rPr"):
+                    parent.remove(i)
+                    continue
+                idx = list(parent).index(i)
+                for k, child in enumerate(list(i)):
+                    parent.insert(idx + k, child)
+                parent.remove(i)
+            if img_del and img_ins:
+                embeds = [b.get(q("r:embed")) for b in p.iter(q("a:blip"))]
+                same = len(set(embeds)) == 1
+                note = "%s: рисунок %s." % (label, "уменьшен" if same else "заменён (прежний вариант удалён)")
+            elif new_para:
+                note = "%s: абзац добавлен." % label
+            else:
+                note = "%s. Было: «%s»" % (label, old_text)
+            self._comment_on(p, note, resolved=True)
+        # The paragraph texts used for addressing now are the accepted ones.
+        self._paras = list(self.body.iter(q("w:p")))
+        self._orig_text = [self._text(p) for p in self._paras]
 
     # ---------- images ----------
     def _drawing_run(self, snippet):
@@ -405,11 +508,55 @@ class Doc:
             ct.write(path, xml_declaration=True, encoding="UTF-8", standalone=True)
 
     # ---------- saving ----------
-    def _write_comments(self):
-        if not self._comments:
+    def _add_rel(self, rel_type, target):
+        rels_path = os.path.join(self.dir, "word", "_rels", "document.xml.rels")
+        rels = etree.parse(rels_path)
+        if any(r.get("Target") == target for r in rels.getroot()):
             return
-        root = etree.Element(q("w:comments"), nsmap={"w": W})
-        for cid, text in self._comments:
+        ids = {r.get("Id") for r in rels.getroot()}
+        k = 1
+        while "rIdC%d" % k in ids:
+            k += 1
+        rel = etree.SubElement(rels.getroot(), "{%s}Relationship" % PKG_REL)
+        rel.set("Id", "rIdC%d" % k)
+        rel.set("Type", rel_type)
+        rel.set("Target", target)
+        rels.write(rels_path, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+    def _add_override(self, part, ctype):
+        ct_path = os.path.join(self.dir, "[Content_Types].xml")
+        ct = etree.parse(ct_path)
+        if any(el.get("PartName") == part for el in ct.getroot()):
+            return
+        o = etree.SubElement(ct.getroot(), "{%s}Override" % CT)
+        o.set("PartName", part)
+        o.set("ContentType", ctype)
+        ct.write(ct_path, xml_declaration=True, encoding="UTF-8", standalone=True)
+
+    def _write_comments(self):
+        if not self._comments and not self._resolve_existing:
+            return
+        cpath = os.path.join(self.dir, "word", "comments.xml")
+        if self._ctree is None:
+            self._ctree = etree.ElementTree(etree.Element(q("w:comments"), nsmap={"w": W, "w14": W14}))
+        root = self._ctree.getroot()
+        if "w14" not in (root.nsmap or {}):
+            new_root = etree.Element(root.tag, nsmap={**root.nsmap, "w14": W14})
+            for c in list(root):
+                new_root.append(c)
+            self._ctree = etree.ElementTree(new_root)
+            root = new_root
+        done_by_para = {}
+        ext_path = os.path.join(self.dir, "word", "commentsExtended.xml")
+        if os.path.exists(ext_path):
+            for ex in etree.parse(ext_path).getroot():
+                done_by_para[ex.get("{%s}paraId" % W15)] = ex.get("{%s}done" % W15) == "1"
+        resolved = {}
+        for c in root:
+            last = c.findall(q("w:p"))[-1]
+            was_done = done_by_para.get(last.get("{%s}paraId" % W14), False)
+            resolved[c.get(q("w:id"))] = self._resolve_existing or was_done
+        for cid, text, done in self._comments:
             c = etree.SubElement(root, q("w:comment"))
             c.set(q("w:id"), cid)
             c.set(q("w:author"), self.author)
@@ -421,23 +568,30 @@ class Doc:
                 t = etree.SubElement(r, q("w:t"))
                 t.text = line
                 t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
-        path = os.path.join(self.dir, "word", "comments.xml")
-        if os.path.exists(path):
-            raise RuntimeError("document already has comments.xml; merging is not implemented")
-        etree.ElementTree(root).write(path, xml_declaration=True, encoding="UTF-8", standalone=True)
-        rels_path = os.path.join(self.dir, "word", "_rels", "document.xml.rels")
-        rels = etree.parse(rels_path)
-        rel = etree.SubElement(rels.getroot(), "{%s}Relationship" % PKG_REL)
-        rel.set("Id", "rIdComments1")
-        rel.set("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments")
-        rel.set("Target", "comments.xml")
-        rels.write(rels_path, xml_declaration=True, encoding="UTF-8", standalone=True)
-        ct_path = os.path.join(self.dir, "[Content_Types].xml")
-        ct = etree.parse(ct_path)
-        o = etree.SubElement(ct.getroot(), "{%s}Override" % CT)
-        o.set("PartName", "/word/comments.xml")
-        o.set("ContentType", "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml")
-        ct.write(ct_path, xml_declaration=True, encoding="UTF-8", standalone=True)
+            resolved[cid] = done
+        # Resolved state lives in commentsExtended.xml, keyed by the paraId of
+        # each comment's last paragraph.
+        ext_root = etree.Element("{%s}commentsEx" % W15, nsmap={"w15": W15})
+        used = set()
+        for n, c in enumerate(root):
+            last = c.findall(q("w:p"))[-1]
+            pid = last.get("{%s}paraId" % W14)
+            if pid is None or pid in used:
+                pid = "%08X" % (0x10000000 + int(c.get(q("w:id"))) * 7 + 1)
+                last.set("{%s}paraId" % W14, pid)
+            used.add(pid)
+            ex = etree.SubElement(ext_root, "{%s}commentEx" % W15)
+            ex.set("{%s}paraId" % W15, pid)
+            ex.set("{%s}done" % W15, "1" if resolved.get(c.get(q("w:id"))) else "0")
+        self._ctree.write(cpath, xml_declaration=True, encoding="UTF-8", standalone=True)
+        etree.ElementTree(ext_root).write(os.path.join(self.dir, "word", "commentsExtended.xml"),
+                                          xml_declaration=True, encoding="UTF-8", standalone=True)
+        self._add_rel("http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments", "comments.xml")
+        self._add_rel("http://schemas.microsoft.com/office/2011/relationships/commentsExtended", "commentsExtended.xml")
+        self._add_override("/word/comments.xml",
+                           "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml")
+        self._add_override("/word/commentsExtended.xml",
+                           "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml")
 
     def save(self, out_path):
         self.tree.write(self.doc_path, xml_declaration=True, encoding="UTF-8", standalone=True)
@@ -475,6 +629,10 @@ def _reject_all(root):
         parent.remove(el)
     for el in list(root.iter(q("w:delText"))):
         el.tag = q("w:t")
+    _strip_comments(root)
+
+
+def _strip_comments(root):
     for el in list(root.iter(q("w:commentRangeStart"), q("w:commentRangeEnd"))):
         el.getparent().remove(el)
     for el in list(root.iter(q("w:commentReference"))):
@@ -519,6 +677,7 @@ def verify_reject(original_docx, edited_docx):
             root = etree.fromstring(z.read("word/document.xml"))
         if reject:
             _reject_all(root)
+        _strip_comments(root)
         _normalize(root)
         return etree.tostring(root, method="c14n")
     a, b = body(original_docx, False), body(edited_docx, True)
