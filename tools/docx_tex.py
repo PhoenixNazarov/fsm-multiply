@@ -16,6 +16,8 @@ base.docx exactly. In the .tex:
   - remove a marker with its text to delete the paragraph;
   - start a paragraph with `% @new` (optionally `% @new like=N`) to insert
     it after the previous paragraph;
+  - point the \\includegraphics after `% @img N` to another file to
+    replace that picture (the old one is shown deleted, the new inserted);
   - `% @comment: text` (or `% @comment resolved: text`) attaches a comment
     to the paragraph above it;
   - any other `%` line is a note for the authors and is ignored.
@@ -181,6 +183,16 @@ def parse(tex_path):
                 cur = {"kind": "new", "like": int(m.group(1)) if m.group(1) else None, "text": [], "comments": []}
                 blocks.append(cur)
                 continue
+            m = re.match(r"%\s*@img\s+(\d+)\s*$", s)
+            if m:
+                cur = {"kind": "img", "idx": int(m.group(1)), "text": [], "comments": [], "src": None}
+                blocks.append(cur)
+                continue
+            m = re.search(r"\\includegraphics(?:\[[^]]*\])?\{([^}]*)\}", s)
+            if m and cur is not None and cur["kind"] == "img":
+                cur["src"] = m.group(1)
+                cur = None
+                continue
             m = re.match(r"%\s*@comment(\s+resolved)?\s*:\s*(.*)$", s)
             if m and cur is not None:
                 cur["comments"].append((m.group(2), bool(m.group(1))))
@@ -209,7 +221,22 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
     anchor = None
     elements = {i: p for i, p in enumerate(d._paras)}
     base_text = list(d._orig_text)
+    tex_dir = os.path.dirname(os.path.abspath(tex_path))
+    rels = etree.parse(os.path.join(d.dir, "word", "_rels", "document.xml.rels")).getroot()
+    targets = {r.get("Id"): r.get("Target") for r in rels}
+    images = []
     for b in blocks:
+        if b["kind"] == "img":
+            if b["src"]:
+                p = elements[b["idx"]]
+                blip = next(p.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}blip"))
+                old = os.path.join(d.dir, "word", targets[blip.get(
+                    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed")])
+                new = os.path.join(tex_dir, b["src"])
+                with open(old, "rb") as f1, open(new, "rb") as f2:
+                    if f1.read() != f2.read():
+                        images.append((p, new))
+            continue
         if b["kind"] == "p":
             p = elements[b["idx"]]
             seen.add(b["idx"])
@@ -228,6 +255,8 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
         text = base_text[i]
         if i not in seen and text.strip() and p.find(".//" + q("w:drawing")) is None:
             d.delete_paragraph(p)
+    for p, new in images:
+        d.replace_image(p, new)
     d.save(out_docx)
 
 

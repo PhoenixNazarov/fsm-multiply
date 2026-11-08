@@ -7,6 +7,6 @@ skinparam dpi 240
 state "Звуки (A4)" as A4 {
     [*] --> A40
     state "Ожидание" as A40
-    A40 --> A40 : <u>e01 & y0=2, e06 & y0=4, e33</u>\nz41, z40, z42
+    A40 --> A40 : <u>e01 & y0=2</u> / z41\n<u>e06 & y0=4</u> / z40\n<u>e33</u> / z42
 }
 @enduml
