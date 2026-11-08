@@ -36,3 +36,4 @@ articles/**/*.log
 articles/**/*.out
 articles/**/puml/*.png
 
+__pycache__/
