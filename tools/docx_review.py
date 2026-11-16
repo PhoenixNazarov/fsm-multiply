@@ -317,10 +317,25 @@ class Doc:
         rpr_mark.insert(0, self._mark("w:ins"))
         if ppr.getparent() is None:
             new.append(ppr)
-        runs = [r for r in tpl if r.tag == q("w:r")]
+        runs = [r for r in tpl.iter(q("w:r"))
+                if "".join(t.text or "" for t in r.iter(q("w:t"), q("w:delText"))).strip()]
         rpr = runs[-1].find(q("w:rPr")) if runs else None
         wrap = self._mark("w:ins")
-        wrap.append(self._run(rpr, text))
+        # Captions: keep the template's own formatting of "Рис. N." (usually bold).
+        m = re.match(r"(Рис\. \d+\.)", text)
+        if m and runs and len(runs) > 1:
+            first_rpr = runs[0].find(q("w:rPr"))
+            wrap.append(self._run(first_rpr, m.group(1)))
+            text = text[m.end():]
+        for k, piece in enumerate(text.split("\t")):
+            if k:
+                tab = etree.Element(q("w:r"))
+                if rpr is not None:
+                    tab.append(copy.deepcopy(rpr))
+                etree.SubElement(tab, q("w:tab"))
+                wrap.append(tab)
+            if piece:
+                wrap.append(self._run(rpr, piece))
         new.append(wrap)
         p.addnext(new)
         # Make the new paragraph addressable by its text in later calls.
@@ -330,7 +345,8 @@ class Doc:
 
     def delete_paragraph(self, snippet):
         p = self.para(snippet)
-        for r in self._text_runs(p):
+        runs = [r for r in p if r.tag == q("w:r") and r.find(q("w:commentReference")) is None]
+        for r in runs:
             wrap = self._mark("w:del")
             r.addprevious(wrap)
             wrap.append(r)
@@ -376,6 +392,56 @@ class Doc:
     def resolve_existing_comments(self):
         """Mark every comment already in the document as resolved (kept visible)."""
         self._resolve_existing = True
+
+    PPR_ORDER = ["pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr",
+                 "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap",
+                 "overflowPunct", "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd",
+                 "snapToGrid", "spacing", "ind", "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc",
+                 "textDirection", "textAlignment", "textboxTightWrap", "outlineLvl", "divId", "cnfStyle",
+                 "rPr", "sectPr", "pPrChange"]
+
+    def _ppr_set(self, ppr, jc=None, before=None, after=None):
+        def child(name):
+            el = ppr.find(q("w:" + name))
+            if el is None:
+                el = etree.Element(q("w:" + name))
+                rank = self.PPR_ORDER.index(name)
+                for k, ch in enumerate(ppr):
+                    local = etree.QName(ch).localname
+                    if local in self.PPR_ORDER and self.PPR_ORDER.index(local) > rank:
+                        ch.addprevious(el)
+                        break
+                else:
+                    ppr.append(el)
+            return el
+        if jc is not None:
+            child("jc").set(q("w:val"), jc)
+        if before is not None:
+            child("spacing").set(q("w:before"), str(before))
+        if after is not None:
+            child("spacing").set(q("w:after"), str(after))
+
+    def format(self, snippet, jc=None, before=None, after=None, tracked=True):
+        """Change paragraph alignment/spacing; tracked as w:pPrChange."""
+        p = snippet if isinstance(snippet, etree._Element) else self.para(snippet)
+        ppr = p.find(q("w:pPr"))
+        if ppr is None:
+            ppr = etree.Element(q("w:pPr"))
+            p.insert(0, ppr)
+        if tracked and ppr.find(q("w:pPrChange")) is None:
+            old = etree.Element(q("w:pPr"))
+            for ch in ppr:
+                if etree.QName(ch).localname not in ("rPr", "sectPr", "pPrChange"):
+                    old.append(copy.deepcopy(ch))
+            change = self._mark("w:pPrChange")
+            change.append(old)
+            self._ppr_set(ppr, jc, before, after)
+            ppr.append(change)
+            sect = ppr.find(q("w:sectPr"))
+            if sect is not None:
+                change.addprevious(sect)
+        else:
+            self._ppr_set(ppr, jc, before, after)
 
     def accept_previous(self, label):
         """Accept every tracked change already in the document. Each changed
@@ -612,6 +678,16 @@ class Doc:
 
 def _reject_all(root):
     """Undo every tracked change and comment marker in a document.xml tree."""
+    for change in list(root.iter(q("w:pPrChange"))):
+        ppr = change.getparent()
+        old = change.find(q("w:pPr"))
+        keep = [ch for ch in ppr if etree.QName(ch).localname in ("rPr", "sectPr")]
+        for ch in list(ppr):
+            ppr.remove(ch)
+        for ch in list(old if old is not None else []):
+            ppr.append(ch)
+        for ch in keep:
+            ppr.append(ch)
     for p in list(root.iter(q("w:p"))):
         mark = p.find(q("w:pPr") + "/" + q("w:rPr") + "/" + q("w:ins"))
         if mark is not None:

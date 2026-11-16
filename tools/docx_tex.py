@@ -18,6 +18,8 @@ base.docx exactly. In the .tex:
     it after the previous paragraph;
   - point the \\includegraphics after `% @img N` to another file to
     replace that picture (the old one is shown deleted, the new inserted);
+  - `% @format: jc=both before=240` changes alignment/spacing of the
+    paragraph above it (tracked as a formatting change);
   - `% @comment: text` (or `% @comment resolved: text`) attaches a comment
     to the paragraph above it;
   - any other `%` line is a note for the authors and is ignored.
@@ -46,7 +48,7 @@ def to_tex(text):
                 break
         else:
             out.append(ch)
-    s = "".join(out)
+    s = "".join(out).replace("\t", "\\tab{}")
     return re.sub(r"(?<![\w$])A(\d)(?![\w])", r"$A_{\1}$", s)
 
 
@@ -55,7 +57,7 @@ def from_tex(s):
     s = s.replace("\\textbackslash{}", "\0")
     for a, b in ESC[1:]:
         s = s.replace(b, a)
-    return s.replace("\0", "\\")
+    return s.replace("\0", "\\").replace("\\tab{}", "\t")
 
 
 def _bold(run):
@@ -188,10 +190,15 @@ def parse(tex_path):
                 cur = {"kind": "img", "idx": int(m.group(1)), "text": [], "comments": [], "src": None}
                 blocks.append(cur)
                 continue
-            m = re.search(r"\\includegraphics(?:\[[^]]*\])?\{([^}]*)\}", s)
+            m = re.search(r"\\includegraphics(\[[^]]*\])?\{([^}]*)\}", s)
             if m and cur is not None and cur["kind"] == "img":
-                cur["src"] = m.group(1)
+                cur["src"] = m.group(2)
+                cur["opts"] = m.group(1)
                 cur = None
+                continue
+            m = re.match(r"%\s*@format\s*:\s*(.*)$", s)
+            if m and cur is not None:
+                cur.setdefault("format", {}).update(dict(kv.split("=", 1) for kv in m.group(1).split()))
                 continue
             m = re.match(r"%\s*@comment(\s+resolved)?\s*:\s*(.*)$", s)
             if m and cur is not None:
@@ -227,6 +234,7 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
     images = []
     for b in blocks:
         if b["kind"] == "img":
+            anchor = elements[b["idx"]]
             if b["src"]:
                 p = elements[b["idx"]]
                 blip = next(p.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}blip"))
@@ -235,7 +243,8 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
                 new = os.path.join(tex_dir, b["src"])
                 with open(old, "rb") as f1, open(new, "rb") as f2:
                     if f1.read() != f2.read():
-                        images.append((p, new))
+                        w = re.search(r"width=([\d.]+)cm", b.get("opts") or "")
+                        images.append((p, new, float(w.group(1)) if w else None))
             continue
         if b["kind"] == "p":
             p = elements[b["idx"]]
@@ -249,14 +258,16 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
             like = elements[b["like"]] if b["like"] is not None else anchor
             p = d.insert_after(anchor, b["text"], like=like)
             anchor = p
+        if b.get("format"):
+            d.format(anchor, tracked=b["kind"] == "p", **b["format"])
         for text, resolved in b["comments"]:
             d.comment(anchor, text, resolved=resolved)
     for i, p in elements.items():
         text = base_text[i]
         if i not in seen and text.strip() and p.find(".//" + q("w:drawing")) is None:
             d.delete_paragraph(p)
-    for p, new in images:
-        d.replace_image(p, new)
+    for p, new, width in images:
+        d.replace_image(p, new, width_cm=width)
     d.save(out_docx)
 
 
