@@ -18,6 +18,8 @@ base.docx exactly. In the .tex:
     it after the previous paragraph;
   - point the \\includegraphics after `% @img N` to another file to
     replace that picture (the old one is shown deleted, the new inserted);
+  - `% @newimg like=N` followed by \\includegraphics[width=Wcm]{file} inserts a
+    new picture paragraph (formatted like picture paragraph N);
   - `% @format: jc=both before=240` changes alignment/spacing of the
     paragraph above it (tracked as a formatting change);
   - `% @comment: text` (or `% @comment resolved: text`) attaches a comment
@@ -190,8 +192,13 @@ def parse(tex_path):
                 cur = {"kind": "img", "idx": int(m.group(1)), "text": [], "comments": [], "src": None}
                 blocks.append(cur)
                 continue
+            m = re.match(r"%\s*@newimg\s+like=(\d+)\s*$", s)
+            if m:
+                cur = {"kind": "newimg", "like": int(m.group(1)), "text": [], "comments": [], "src": None}
+                blocks.append(cur)
+                continue
             m = re.search(r"\\includegraphics(\[[^]]*\])?\{([^}]*)\}", s)
-            if m and cur is not None and cur["kind"] == "img":
+            if m and cur is not None and cur["kind"] in ("img", "newimg"):
                 cur["src"] = m.group(2)
                 cur["opts"] = m.group(1)
                 cur = None
@@ -233,8 +240,14 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
     targets = {r.get("Id"): r.get("Target") for r in rels}
     images = []
     for b in blocks:
+        if b["kind"] == "newimg":
+            w = re.search(r"width=([\d.]+)cm", b.get("opts") or "")
+            anchor = d.insert_image_after(anchor, os.path.join(tex_dir, b["src"]), elements[b["like"]],
+                                          float(w.group(1)))
+            continue
         if b["kind"] == "img":
             anchor = elements[b["idx"]]
+            seen.add(b["idx"])
             if b["src"]:
                 p = elements[b["idx"]]
                 blip = next(p.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}blip"))
@@ -249,7 +262,7 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
         if b["kind"] == "p":
             p = elements[b["idx"]]
             seen.add(b["idx"])
-            if b["text"] != base_text[b["idx"]]:
+            if b["text"] != base_text[b["idx"]].strip():
                 d.rewrite(p, b["text"])
             anchor = p
         else:
@@ -264,7 +277,7 @@ def build(base_docx, tex_path, out_docx, author="Claude"):
             d.comment(anchor, text, resolved=resolved)
     for i, p in elements.items():
         text = base_text[i]
-        if i not in seen and text.strip() and p.find(".//" + q("w:drawing")) is None:
+        if i not in seen and (text.strip() or p.find(".//" + q("w:drawing")) is not None):
             d.delete_paragraph(p)
     for p, new, width in images:
         d.replace_image(p, new, width_cm=width)

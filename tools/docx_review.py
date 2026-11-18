@@ -522,9 +522,7 @@ class Doc:
         ins.append(new_run)
         dele.addnext(ins)
 
-    def replace_image(self, snippet, png_path, width_cm=None):
-        """Replace an image as a tracked change: old one deleted, new one inserted."""
-        run = self._drawing_run(snippet)
+    def _add_media(self, png_path):
         media_dir = os.path.join(self.dir, "word", "media")
         os.makedirs(media_dir, exist_ok=True)
         n = 1
@@ -545,6 +543,48 @@ class Doc:
         rel.set("Target", "media/" + name)
         rels.write(rels_path, xml_declaration=True, encoding="UTF-8", standalone=True)
         self._ensure_png_content_type()
+        return rid, name
+
+    def insert_image_after(self, snippet, png_path, like, width_cm):
+        """Insert a new paragraph holding a picture (tracked insertion), formatted like
+        the picture paragraph `like`."""
+        p = snippet if isinstance(snippet, etree._Element) else self.para(snippet)
+        tpl = like if isinstance(like, etree._Element) else self.para(like)
+        run = next(r for r in tpl.iter(q("w:r")) if r.find(q("w:drawing")) is not None)
+        rid, name = self._add_media(png_path)
+        new = etree.Element(q("w:p"))
+        ppr = tpl.find(q("w:pPr"))
+        ppr = copy.deepcopy(ppr) if ppr is not None else etree.Element(q("w:pPr"))
+        for ch in ppr.findall(q("w:pPrChange")):
+            ppr.remove(ch)
+        new.append(ppr)
+        rpr_mark = ppr.find(q("w:rPr"))
+        if rpr_mark is None:
+            rpr_mark = etree.SubElement(ppr, q("w:rPr"))
+        for old in rpr_mark.findall(q("w:ins")) + rpr_mark.findall(q("w:del")):
+            rpr_mark.remove(old)
+        rpr_mark.insert(0, self._mark("w:ins"))
+        new_run = copy.deepcopy(run)
+        for blip in new_run.iter(q("a:blip")):
+            blip.set(q("r:embed"), rid)
+        for docpr in new_run.iter(q("wp:docPr")):
+            docpr.set("id", str(int(self._id()) + 1000))
+            docpr.set("name", name)
+        w_px, h_px = _png_size(png_path)
+        cx = width_cm * EMU_PER_CM
+        self._set_extent(new_run, cx, cx * h_px / w_px)
+        ins = self._mark("w:ins")
+        ins.append(new_run)
+        new.append(ins)
+        p.addnext(new)
+        self._paras.insert(self._paras.index(p) + 1, new)
+        self._orig_text.insert(self._paras.index(new), "")
+        return new
+
+    def replace_image(self, snippet, png_path, width_cm=None):
+        """Replace an image as a tracked change: old one deleted, new one inserted."""
+        run = self._drawing_run(snippet)
+        rid, name = self._add_media(png_path)
 
         new_run = copy.deepcopy(run)
         for blip in new_run.iter(q("a:blip")):

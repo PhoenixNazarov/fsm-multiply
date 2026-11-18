@@ -179,23 +179,41 @@ set_text(64, "В предыдущей работе система «игрово
          "а система это показывает. Номера рисунков изменены: у каждого автомата теперь схема связей и диаграмма.")
 
 # Interfaces as schemes, scheme first, then the diagram; tables removed (1.11, 1.15)
-SLOTS = [  # (diagram img, diagram caption, table caption, table img, scheme, fig numbers, name)
-    (78, 79, 81, 82, "if_a0", 1, "«Игровая машина» (A0)"),
-    (94, 95, 97, 98, "if_a1", 3, "«Монетоприемник» (A1)"),
-    (105, 106, 108, 109, "if_a2", 5, "«Игровые барабаны» (A2)"),
-    (118, 119, 121, 122, "if_a3", 7, "«Джекпот-счётчик» (A3)"),
-    (125, 126, 128, 129, "if_a4", 9, "«Звуки» (A4)"),
+SLOTS = [  # (header, diagram img, diagram caption, table caption, table img, scheme, fig number, name)
+    (77, 78, 79, 81, 82, "if_a0", 1, "«Игровая машина» (A0)"),
+    (93, 94, 95, 97, 98, "if_a1", 3, "«Монетоприемник» (A1)"),
+    (104, 105, 106, 108, 109, "if_a2", 5, "«Игровые барабаны» (A2)"),
+    (117, 118, 119, 121, 122, "if_a3", 7, "«Джекпот-счётчик» (A3)"),
+    (124, 125, 126, 128, 129, "if_a4", 9, "«Звуки» (A4)"),
 ]
-for d_img, d_cap, t_cap, t_img, scheme, n, name in SLOTS:
-    diagram_png = os.path.basename(re.search(r"media/([^}]+)\}", find("img", d_img).group(0)).group(1))
-    image(d_img, scheme + ".png", if_width(scheme))
-    set_text(d_cap, "Рис. %d. Схема связей автомата %s" % (n, name),
-             "Замечания 1.11 и 1.15: интерфейс задан схемой связей, как в предыдущей работе (вместо таблицы); "
-             "схема связей идёт первой, затем диаграмма состояний. Рисунок и подпись заменены, таблица удалена."
-             if n == 1 else None)
+
+
+def delete_img(n):
+    global src
+    m = find("img", n)
+    src = src[:m.start()] + src[m.end():]
+
+
+def scheme_before_diagram(header, d_img, d_cap, scheme, n, caption, com):
+    """New picture paragraph with the scheme and its caption right after the section header."""
+    global src
+    m = find("p", header)
+    add = ("%% @newimg like=%d\n\\begin{center}\\includegraphics[width=%.2fcm]{media/%s.png}\\end{center}\n"
+           % (d_img, if_width(scheme), scheme))
+    add += "%% @new like=%d\n%s\n" % (d_cap, to_tex(caption))
+    if com:
+        add += "%% @comment: %s\n" % com
+    src = src[:m.end()] + add + src[m.end():]
+
+
+for header, d_img, d_cap, t_cap, t_img, scheme, n, name in SLOTS:
+    scheme_before_diagram(header, d_img, d_cap, scheme, n, "Рис. %d. Схема связей автомата %s" % (n, name),
+                          "Замечания 1.11 и 1.15: интерфейс задан схемой связей, как в предыдущей работе; схема "
+                          "связей вставлена перед диаграммой состояний, таблица удалена. Диаграммы не менялись, "
+                          "изменились только номера рисунков." if n == 1 else None)
+    set_text(d_cap, re.sub(r"^Рис\. \d+\.", "Рис. %d." % (n + 1), T[d_cap]))
     delete(t_cap)
-    image(t_img, diagram_png, old_width(d_img))
-    after("img", t_img, [(re.sub(r"^Рис\. \d+\.", "Рис. %d." % (n + 1), T[d_cap]), d_cap, None, None)])
+    delete_img(t_img)
 
 # Text after the figures, not between them (1.13, 1.14, 1.15, 2.1–2.6, *)
 for n in (123, 130, 131, 132):
@@ -241,16 +259,7 @@ NEW_TEXT = [
      "переходом, которым автомат A3 выходит из этого состояния (см. доработку 4 в разделе «Доработки "
      "метода»).", 132, "Замечание 2.6: «на e33» → «на событие e33».", None),
 ]
-# the new A4 diagram caption is the last @new after img 129; append the text after it
-m = find("img", 129)
-cap_end = src.index("\n", src.index("% @new like=126\n", m.end()) + len("% @new like=126\n")) + 1
-add = ""
-for text, like, com, f in NEW_TEXT:
-    add += "%% @new like=%d\n%s\n" % (like, to_tex(text))
-    add += "% @format: jc=both\n"
-    if com:
-        add += "%% @comment: %s\n" % com
-src = src[:cap_end] + add + src[cap_end:]
+after("p", 126, [(t, like, com, {"jc": "both"}) for t, like, com, _ in NEW_TEXT])
 
 # ----------------------------------------------------------- Доработки метода
 set_text(138, "Как исправили. Теперь для каждого состояния произведения хранятся сведения о том, в каком "
@@ -346,16 +355,12 @@ after("p", 159, [
 ])
 
 # ---------------------------------------------------- Итоговый автомат (1.11, 1.15)
-legend = list(range(177, 187))
-image(175, "if_final.png", if_width("if_final"))
-set_text(176, "Рис. 11. Схема связей итогового автомата A0 * A1 * A2 * A3 * A4",
-         "Замечания 1.11 и 1.15: сначала схема связей итогового автомата, затем его диаграмма с расшифровкой "
-         "состояний; таблица 7 удалена.")
-for n in legend + [187]:
-    delete(n)
-image(188, "image2.png", old_width(175))
-after("img", 188, [("Рис. 12. Диаграмма состояний итогового автомата A0 * A1 * A2 * A3 * A4 (9 состояний).", 176,
-                    None, None)] + [("\t" + T[n], n, None, None) for n in legend])
+scheme_before_diagram(174, 175, 176, "if_final", 11, "Рис. 11. Схема связей итогового автомата A0 * A1 * A2 * A3 * A4",
+                      "Замечания 1.11 и 1.15: схема связей итогового автомата вставлена перед его диаграммой, "
+                      "таблица 7 удалена.")
+set_text(176, re.sub(r"^Рис\. 6\.", "Рис. 12.", T[176]))
+delete(187)
+delete_img(188)
 
 # ----------------------------------------------------------------------- Вывод
 set_text(193, T[193].replace("по-прежнему важен в двух случаях.",
